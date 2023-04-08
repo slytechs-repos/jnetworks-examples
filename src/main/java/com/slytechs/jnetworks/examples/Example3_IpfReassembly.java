@@ -15,12 +15,12 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package examples;
+package com.slytechs.jnetworks.examples;
 
 import java.util.concurrent.TimeUnit;
 
 import com.slytechs.jnetworks.HashMode;
-import com.slytechs.jnetworks.HostStream;
+import com.slytechs.jnetworks.HostStream.PacketStream;
 import com.slytechs.jnetworks.NetException;
 import com.slytechs.jnetworks.constants.TablePersistance;
 import com.slytechs.jnetworks.constants.UnmatchedClassification;
@@ -28,11 +28,11 @@ import com.slytechs.jnetworks.network.Network;
 import com.slytechs.jnetworks.network.Network.Configuration;
 import com.slytechs.jnetworks.ntapi.NapatechFilter;
 import com.slytechs.jnetworks.pcap.PcapNetwork;
-import com.slytechs.jnetworks.transport.DataStreamReassembly;
-import com.slytechs.jnetworks.transport.DataStreamSegment;
-import com.slytechs.jnetworks.transport.Transport;
-import com.slytechs.jnetworks.transport.Transport.TransportConfiguration;
+import com.slytechs.protocol.Packet;
+import com.slytechs.protocol.pack.core.Ethernet;
+import com.slytechs.protocol.pack.core.Ip4;
 import com.slytechs.protocol.runtime.util.MemoryUnit;
+import com.slytechs.jnetworks.network.PacketCapture;
 
 /**
  * @author Sly Technologies Inc
@@ -40,49 +40,51 @@ import com.slytechs.protocol.runtime.util.MemoryUnit;
  * @author Mark Bednarczyk
  *
  */
-public class Example6_StreamReassembly {
+public class Example3_IpfReassembly {
 	public static void main(String[] args) throws NetException {
 
+		// Convention note: Network stands for jNetWorks (drop the 'j')
 		try (Network network = new PcapNetwork()) {
 
 			try (Configuration config = network.configuration()) {
-				config.assignTrafficRange(0, 3)
+				config.assignTraffic(0)
 						.color(7)
 						.hash(HashMode.HASH_5TUPLE)
 						.filter(new NapatechFilter("(port == 0) && (Layer3Protocol == IP)"));
 
-				config.ipfModeRange(4, 5)
-						.tableSize(256, MemoryUnit.MEGABYTES)
+				config.ipfModeRange(1, 2)
+						.tableSize(4, MemoryUnit.MEGABYTES)
 						.timeout(1, TimeUnit.SECONDS)
 						.tablePersistance(TablePersistance.LAST_FRAGMENT)
 						.unmatchedClassification(UnmatchedClassification.ALL);
+
 			}
 
-			try (Transport transport = network.transport()) {
+			try (PacketCapture capture = network.packetCapture()) {
+				PacketStream stream = capture.getStream(0);
 
-				try (TransportConfiguration config = transport.configuration()) {
-					config.enableReassembly(true)
-							.enableSegmentPassthrough(false);
+				Ethernet ethernet = new Ethernet();
+				Ip4 ip4 = new Ip4();
 
-					config.assignTraffic()
-							.hash(HashMode.HASH_5TUPLE_SORTED);
-				}
+				while (stream.isOpen()) {
+					try (Packet packet = stream.get()) {
 
-				try (DataStreamReassembly capture = transport.dataStreamReassembly();
-						HostStream<DataStreamSegment> segments = capture.getStream(0)) {
-
-					while (segments.isOpen()) {
-						try (DataStreamSegment descriptor = segments.get()) {
-
-						} catch (InterruptedException e) {
-							capture.close();
+						if (packet.hasHeader(ethernet)) {
+							System.out.println(ethernet);
 						}
+
+						if (packet.hasHeader(ip4)) {
+							System.out.println(ip4);
+						}
+
+					} catch (InterruptedException e) {
+						break;
 					}
-
 				}
-
 			}
+
 		}
 
 	}
+
 }

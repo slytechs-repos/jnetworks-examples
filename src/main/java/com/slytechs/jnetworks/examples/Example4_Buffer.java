@@ -15,7 +15,7 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package examples;
+package com.slytechs.jnetworks.examples;
 
 import static com.slytechs.protocol.runtime.util.MemoryUnit.*;
 
