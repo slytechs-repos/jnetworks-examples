@@ -1,1 +1,2 @@
-# jnetwork-examples
+# jNetWorks Examples
+Various examples of **jNetWorks** API usage
