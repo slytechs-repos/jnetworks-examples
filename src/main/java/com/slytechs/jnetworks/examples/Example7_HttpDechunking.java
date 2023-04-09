@@ -35,7 +35,7 @@ import com.slytechs.protocol.pack.core.Ip4;
 import com.slytechs.protocol.pack.core.Tcp;
 import com.slytechs.protocol.pack.web.Html;
 import com.slytechs.protocol.pack.web.Http;
-import com.slytechs.protocol.runtime.util.NotFound;
+import com.slytechs.protocol.runtime.NotFound;
 
 /**
  * Example showing how to capture offline packets and dispatch to a user packet

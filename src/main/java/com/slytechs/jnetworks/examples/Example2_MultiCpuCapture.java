@@ -32,7 +32,7 @@ import com.slytechs.jnetworks.util.concurrent.StructuredNetScope;
 import com.slytechs.protocol.Packet;
 import com.slytechs.protocol.pack.core.Ethernet;
 import com.slytechs.protocol.pack.core.Ip4;
-import com.slytechs.protocol.runtime.util.NotFound;
+import com.slytechs.protocol.runtime.NotFound;
 
 /**
  * @author Sly Technologies Inc

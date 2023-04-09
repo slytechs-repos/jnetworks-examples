@@ -27,13 +27,13 @@ import com.slytechs.jnetworks.NetException;
 import com.slytechs.jnetworks.network.Network;
 import com.slytechs.jnetworks.network.Network.Configuration;
 import com.slytechs.jnetworks.network.Network.Information;
+import com.slytechs.jnetworks.network.PacketCapture;
 import com.slytechs.jnetworks.pcap.PcapFilter;
 import com.slytechs.jnetworks.pcap.PcapNetwork;
 import com.slytechs.protocol.Packet;
 import com.slytechs.protocol.pack.core.Ethernet;
 import com.slytechs.protocol.pack.core.Ip4;
-import com.slytechs.protocol.runtime.util.NotFound;
-import com.slytechs.jnetworks.network.PacketCapture;
+import com.slytechs.protocol.runtime.NotFound;
 
 /**
  * @author Sly Technologies Inc
