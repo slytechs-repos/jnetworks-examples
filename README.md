@@ -19,54 +19,39 @@ These examples illustrate the jNetWorks SDK’s capabilities across various netw
 ## Planned Examples
 
 The following examples will be added to expand the repository’s coverage of network programming use cases with the jNetWorks SDK in Java:
-- `BypassConfigExample.java` - Configures bypass settings.
-- `BypassInfoExample.java` - Provides bypass information.
-- `BypassWatchdogExample.java` - Implements watchdog functionality for bypass.
-- `ConfigEventExample.java` - Handles configuration events.
-- `EventMonitorExample.java` - Monitors network events.
-- `FlowLearnSpanExample.java` - Learns flow and spans network traffic.
-- `FlowMatchExample.java` - Matches network flows.
-- `HashCalcSingleExample.java` - Calculates single hash values.
-- `InfoExample.java` - Provides network information.
-- `AnalysisExample.java` - Performs network traffic analysis.
+- `TransmitPacketExample.java` - Transmits packets using the packet interface, sending 2,500,000 packets of 1024 bytes from port 0 with an incrementing 32-bit pattern.
+- `TransmitPcapExample.java` - Transmits PCAP packets using the packet interface, sending 2,500,000 packets of 1024 bytes from port 0 with an incrementing 32-bit pattern, supporting transmit on timestamp or segment interfaces with the "forceTxOnTs" feature enabled for timestamp mode.
+- `VlanDemoExample.java` - Implements VLAN tagging for received packets using 4GA inline capabilities, adding a VLAN tag before forwarding.
+- `PpsExample.java` - Utilizes PPS (Packets Per Second) functionality.
+- `StatExample.java` - Uses the statistics stream interface to manage network statistics.
+- `StatUsageExample.java` - Uses the statistics stream interface to read hostbuffer usage statistics.
+- `SensorExample.java` - Employs the Info stream interface for sensor data.
+- `TransmitOnTimestampExample.java` - Transmits packets on timestamp using the packet interface, sending 100,000 packets of 296 bytes from port 0 at approximately 5 Mb/s with an incrementing 32-bit pattern, also available in segment mode.
+- `TimestampInjectExample.java` - Controls TX timestamp injection and FCS generation per packet using dynamic descriptor 3, transmitting six packet variations (no timestamp/no change, no timestamp/good FCS, no timestamp/bad FCS, timestamp/no change, timestamp/good FCS, timestamp/bad FCS) in a loop, with RX checking latency and dumping packets.
+- `SegmentInlineExample.java` - Performs inline processing with the segment interface.
+- `ReplayExample.java` - Replays a capture file onto a port.
+- `ReadCapFileExample.java` - Reads a capture file, operational without NTservice.
+- `NumaExample.java` - Utilizes host buffers allocated to a specific NUMA node, applicable to Linux, using host buffers on NUMA node 1 and receiving data on port 0.
+- `NetflowExample.java` - Extracts NetFlow information from packets using the Type1 descriptor.
+- `IpfdemoExample.java` - Implements IP fragment re-assembling using FPGA IPFMode, accelerating load balancing with a 5-tuple hash algorithm and handling un-matched fragments.
+- `HostBufferPollExample.java` - Polls for NetBuffer attachment.
+- `ChecksumExample.java` - Transmits 10 packets with L3/L4 checksum calculation controlled via packet descriptor bits, defaulting to adapter-recalculated checksums.
 - `CapFileConvertExample.java` - Converts capture files.
-- `ChecksumExample.java` - Computes packet checksums.
-- `HostBufferPollExample.java` - Polls host buffers.
-- `InlineExample.java` - Processes inline operations.
-- `InfoDemoExample.java` - Showcases an information demonstration.
-- `PreDemoExample.java` - Provides a pre-processing demonstration.
-- `NumaExample.java` - Explores NUMA (Non-Uniform Memory Access) usage.
-- `ReadCapFileExample.java` - Reads capture files.
-- `ReplayExample.java` - Replays captured packets.
-- `Replay4GExample.java` - Replays packets with 4G support.
-- `ReplayWithTimestampInjectExample.java` - Replays packets with timestamp injection.
-- `SegmentInlineExample.java` - Processes segments inline.
-- `StreamIdStatisticsExample.java` - Gathers stream ID statistics.
-- `TimestampInjectExample.java` - Injects timestamps into packets.
-- `TransmitMultiFunctionExample.java` - Handles multi-function transmission.
-- `TransmitOnTimestampExample.java` - Transmits based on timestamps.
-- `TransmitOnTimestampSetClockExample.java` - Sets clock for timestamp-based transmission.
-- `TransmitPcapExample.java` - Transmits PCAP file contents.
-- `TransmitSegmentExample.java` - Transmits packet segments.
-- `TransmitSegmentDynDescrExample.java` - Uses dynamic descriptors for segment transmission.
-- `VlanDemoExample.java` - Demonstrates VLAN (Virtual Local Area Network) handling.
-- `PpsExample.java` - Measures packets per second.
-- `SensorExample.java` - Utilizes sensor data in networking.
-- `StatExample.java` - Displays network statistics.
-- `StatUsageExample.java` - Shows resource usage statistics.
+- `InfoExample.java` - Retrieves and displays adapter information, including serial number, hardware/FPGA version, and PCI identifier, using the Info stream interface.
+- `EventMonitorExample.java` - Monitors events in an infinite loop, printing events and translating sensor data into text.
 
 ## Getting Started
 
 ### Prerequisites
-- **Java Development Kit (JDK)**: Version 11 or higher.
-- **jNetWorks SDK**: Install from the official source (consult the jNetWorks documentation).
+- **Java Development Kit (JDK)**: Version 22 or higher.
+- **jNetWorks SDK**: Install from the git repository (slytechs-repos) or Maven Central repository.
 - **Compatible Hardware**: Optional Napatech SmartNIC or Intel DPDK-compatible hardware for enhanced performance.
 - **Build Tools**: Use Maven or Gradle for building.
 
 ### Installation
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/jnetworks-sdk-examples.git
+   git clone https://github.com/slytechs-repos/jnetworks-sdk-examples.git
    cd jnetworks-sdk-examples
    ```
 2. Add the jNetWorks SDK to your project dependencies (via Maven or manually include JAR files).
@@ -75,19 +60,10 @@ The following examples will be added to expand the repository’s coverage of ne
 ### Running an Example
 To run the `CaptureExample.java`:
 ```bash
-javac -cp path/to/jnetworks-sdk.jar com/slytechs/jnet/jnetworks/tests/CaptureExample.java
-java -cp .:path/to/jnetworks-sdk.jar com.slytechs.jnet.jnetworks.tests.CaptureExample
+javac -mp path/to/jnetworks-sdk.jar com/slytechs/jnet/jnetworks/tests/CaptureExample.java
+java -mp .:path/to/jnetworks-sdk.jar com.slytechs.jnet.jnetworks.tests.CaptureExample
 ```
 Ensure the jNetWorks SDK is properly configured and permissions are in place.
-
-## Contributing
-
-Contributions are welcome to enhance this repository. To add a new example or improve an existing one:
-1. Fork the repository.
-2. Create a new branch for your feature or fix.
-3. Add your example under the appropriate package (e.g., `com.slytechs.jnet.jnetworks.tests`).
-4. Include detailed Javadoc comments and update the README with the new example.
-5. Submit a pull request with a clear description of your changes.
 
 ## License
 
@@ -96,8 +72,9 @@ This repository is licensed under the **Sly Technologies Free License**. See the
 ## Contact
 
 For questions or support, contact the maintainers:
-- **Mark Bednarczyk**: mark@slytechs.com
-- **Sly Technologies Inc.**: [Your contact info or website]
+- **Support**: support@slytechs.com
+- **Sales**: sales@slytechs.com
+- **Sly Technologies Inc.**: www.slytechs.com
 
 ## Acknowledgments
 
