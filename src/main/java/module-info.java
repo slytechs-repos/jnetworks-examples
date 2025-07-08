@@ -7,10 +7,7 @@
  * 
  */
 module com.slytechs.jnetworks.examples {
-	requires com.slytechs.jnetworks;
-	requires com.slytechs.jnetworks.pcap;
-	requires com.slytechs.jnetworks.napatech;
-	requires com.slytechs.jnetworks.dpdk;
-	requires com.slytechs.protocol;
-	requires com.slytechs.protocol.pack.web;
+	requires com.slytechs.jnet.jnetworks.api;
+	requires com.slytechs.jnet.jnetworks.pcap;
+	requires com.slytechs.jnet.protocol.api;
 }
