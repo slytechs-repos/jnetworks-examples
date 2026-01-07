@@ -20,22 +20,23 @@ import java.time.Duration;
 import com.slytechs.sdk.common.session.SessionShutdownException;
 import com.slytechs.sdk.jnetworks.Net;
 import com.slytechs.sdk.jnetworks.NetException;
-import com.slytechs.sdk.jnetworks.capture.CaptureInfo;
 import com.slytechs.sdk.jnetworks.channels.PacketChannel;
 import com.slytechs.sdk.jnetworks.channels.PacketChannelSettings;
+import com.slytechs.sdk.jnetworks.concurrency.TaskScope;
+import com.slytechs.sdk.jnetworks.net.Capture;
 import com.slytechs.sdk.jnetworks.pcap.PcapBackend;
-import com.slytechs.sdk.jnetworks.task.TaskScope;
 import com.slytechs.sdk.protocol.core.Packet;
 import com.slytechs.sdk.protocol.core.stack.ProtocolStack;
 
 /**
  * Hello World example for jNetWorks SDK.
  * 
- * <p>Demonstrates basic packet capture using the channel API:
+ * <p>
+ * Demonstrates basic packet capture using the channel API:
  * <ul>
- *   <li>Creating a backend and channel</li>
- *   <li>Setting up a capture pipeline</li>
- *   <li>Processing packets with acquire/release</li>
+ * <li>Creating a backend and channel</li>
+ * <li>Setting up a capture pipeline</li>
+ * <li>Processing packets with acquire/release</li>
  * </ul>
  *
  * @author Mark Bednarczyk [mark@slytechs.com]
@@ -43,56 +44,56 @@ import com.slytechs.sdk.protocol.core.stack.ProtocolStack;
  */
 public class HelloCapture {
 
-    public static void main(String[] args) {
-        new HelloCapture().run();
-    }
+	public static void main(String[] args) {
+		new HelloCapture().run();
+	}
 
-    public void run() {
-        Net.activateLicense();
+	public void run() {
+		Net.activateLicense();
 
-        try (Net net = new PcapBackend()) {
+		try (Net abstractNet = new PcapBackend()) {
 
-            ProtocolStack stack = new ProtocolStack();
-            PacketChannelSettings settings = new PacketChannelSettings();
+			ProtocolStack stack = new ProtocolStack();
+			PacketChannelSettings settings = new PacketChannelSettings();
 
-            PacketChannel channel = net.packetChannel("hello-channel", settings, stack);
+			PacketChannel channel = abstractNet.packetChannel("hello-channel", settings, stack);
 
-            CaptureInfo capture = net.capture("hello-capture", "en0")
-                    .filter("tcp")
-                    .assignTo(channel)
-                    .apply();
+			Capture capture = abstractNet.capture("hello-capture", "en0")
+					.filter("tcp")
+					.assignTo(channel)
+					.apply();
 
-            try (TaskScope scope = new TaskScope(net)) {
-               scope.shutdownAfter(Duration.ofSeconds(10));
-                scope.fork(channel, this::processPackets);
-                scope.awaitCompletion();
-            }
+			try (TaskScope scope = new TaskScope(abstractNet)) {
+				scope.shutdownAfter(Duration.ofSeconds(10));
+				scope.fork(channel, this::processPackets);
+				scope.awaitCompletion();
+			}
 
-            System.out.printf("Capture complete: %d packets%n", capture.metrics().packetsAssigned());
+			System.out.printf("Capture complete: %d packets%n", capture.metrics().packetsAssigned());
 
-        } catch (NetException | InterruptedException e) {
-            e.printStackTrace();
-        }
-    }
+		} catch (NetException | InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
 
-    void processPackets(PacketChannel channel) {
-        System.out.println("Starting packet capture...");
+	void processPackets(PacketChannel channel) {
+		System.out.println("Starting packet capture...");
 
-        while (channel.isActive()) {
-            try {
-                Packet packet = channel.acquire();
+		while (channel.isActive()) {
+			try {
+				Packet packet = channel.acquire();
 
-                System.out.printf("Packet: len=%d, caplen=%d%n",
-                        packet.descriptor().wireLength(),
-                        packet.descriptor().captureLength());
+				System.out.printf("Packet: len=%d, caplen=%d%n",
+						packet.descriptor().wireLength(),
+						packet.descriptor().captureLength());
 
-                channel.release(packet);
+				channel.release(packet);
 
-            } catch (SessionShutdownException | InterruptedException e) {
-                // Normal shutdown, exit loop
-            }
-        }
+			} catch (SessionShutdownException | InterruptedException e) {
+				// Normal shutdown, exit loop
+			}
+		}
 
-        System.out.println("Capture stopped.");
-    }
+		System.out.println("Capture stopped.");
+	}
 }
