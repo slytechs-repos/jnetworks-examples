@@ -51,19 +51,19 @@ public class HelloCapture {
 	public void run() {
 		Net.activateLicense();
 
-		try (Net abstractNet = new PcapBackend()) {
+		try (Net net = new PcapBackend()) {
 
 			ProtocolStack stack = new ProtocolStack();
 			PacketChannelSettings settings = new PacketChannelSettings();
 
-			PacketChannel channel = abstractNet.packetChannel("hello-channel", settings, stack);
+			PacketChannel channel = net.packetChannel("hello-channel", settings, stack);
 
-			Capture capture = abstractNet.capture("hello-capture", "en0")
+			Capture capture = net.capture("hello-capture", "en0")
 					.filter("tcp")
 					.assignTo(channel)
 					.apply();
 
-			try (TaskScope scope = new TaskScope(abstractNet)) {
+			try (TaskScope scope = new TaskScope(net)) {
 				scope.shutdownAfter(Duration.ofSeconds(10));
 				scope.fork(channel, this::processPackets);
 				scope.awaitCompletion();
