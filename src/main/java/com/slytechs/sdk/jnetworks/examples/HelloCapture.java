@@ -63,7 +63,7 @@ public class HelloCapture {
                     .apply();
 
             try (TaskScope scope = new TaskScope(net)) {
-                scope.shutdownAfter(Duration.ofSeconds(10));
+               scope.shutdownAfter(Duration.ofSeconds(10));
                 scope.fork(channel, this::processPackets);
                 scope.awaitCompletion();
             }
