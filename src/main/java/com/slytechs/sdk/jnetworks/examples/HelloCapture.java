@@ -22,7 +22,7 @@ import com.slytechs.sdk.jnetworks.Net;
 import com.slytechs.sdk.jnetworks.NetException;
 import com.slytechs.sdk.jnetworks.channels.PacketChannel;
 import com.slytechs.sdk.jnetworks.channels.PacketChannelSettings;
-import com.slytechs.sdk.jnetworks.concurrency.TaskScope;
+import com.slytechs.sdk.jnetworks.concurrency.TaskExecutor;
 import com.slytechs.sdk.jnetworks.net.Capture;
 import com.slytechs.sdk.jnetworks.pcap.PcapBackend;
 import com.slytechs.sdk.protocol.core.Packet;
@@ -49,49 +49,75 @@ public class HelloCapture {
 	}
 
 	public void run() {
+		// Searches for commercial license or fallback on community license
 		Net.activateLicense();
 
+		// use DpdkBackend with DPDK capable NICs/Ports
+		// use NtapiBackend with Napatech SmartNIC configured adapters/Ports
 		try (Net net = new PcapBackend()) {
 
-			ProtocolStack stack = new ProtocolStack();
-			PacketChannelSettings settings = new PacketChannelSettings();
+			ProtocolStack stack = new ProtocolStack(); // Enables IPF/TCP reassembly
+			PacketChannelSettings settings = new PacketChannelSettings(); // Channel options
 
 			PacketChannel channel = net.packetChannel("hello-channel", settings, stack);
 
+			// Start capture only, on first active (with traffic) ETH port
 			Capture capture = net.capture("hello-capture", "en0")
-					.filter("tcp")
-					.assignTo(channel)
-					.apply();
+					.filter("tcp") // Pcap BPF filter
+					.assignTo(channel) // Traffic distributed to this channel, need to fork a Task
+					.apply(); // Start capture, no tx capabilities
 
-			try (TaskScope scope = new TaskScope(net)) {
-				scope.shutdownAfter(Duration.ofSeconds(10));
-				scope.fork(channel, this::processPackets);
-				scope.awaitCompletion();
+			System.out.println("Selected port for capture: " + capture.getPort());
+
+			try (TaskExecutor executor = net.executor("packet-task")) {
+				executor.fork(channel, this::processPackets)
+						.shutdownAfter(Duration.ofSeconds(10))
+						.awaitCompletion();
+
+			} catch (Throwable e) {
+				e.printStackTrace();
 			}
-
+			
 			System.out.printf("Capture complete: %d packets%n", capture.metrics().packetsAssigned());
 
-		} catch (NetException | InterruptedException e) {
+		} catch (NetException e) {
 			e.printStackTrace();
 		}
 	}
 
-	void processPackets(PacketChannel channel) {
+	/**
+	 * Process captured or inline or transmit traffic. One task is attached to each
+	 * channel via TaskExecutor.fork(Channel[]).
+	 * 
+	 * <p>
+	 * Capture tasks, acquire/release packets after processing, no TX forwarding
+	 * between ports.
+	 * </p>
+	 * 
+	 * @param channel
+	 * @throws SessionShutdownException
+	 * @throws InterruptedException
+	 */
+	void processPackets(PacketChannel channel) throws SessionShutdownException, InterruptedException {
 		System.out.println("Starting packet capture...");
 
+		long count = 0;
+
+		// Will turn to false when task or net session is shutdown.
 		while (channel.isActive()) {
-			try {
-				Packet packet = channel.acquire();
+			Packet packet = channel.acquire(); // Acquire blocks with interrupt
 
-				System.out.printf("Packet: len=%d, caplen=%d%n",
-						packet.descriptor().wireLength(),
-						packet.descriptor().captureLength());
+			// Optionally can persist packets either from Arena or pool
+			// Packet.persist(), Packet.copy(), Packet.persistTo(pool), Packet.copyTo(pool)
 
-				channel.release(packet);
+			count++;
+			System.out.printf("Packet #%d: len=%,-6d, ts=%s%n",
+					count,
+					packet.captureLength(),
+					packet.timestampInfo());
 
-			} catch (SessionShutdownException | InterruptedException e) {
-				// Normal shutdown, exit loop
-			}
+			channel.release(packet); // Must release
+
 		}
 
 		System.out.println("Capture stopped.");
