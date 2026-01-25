@@ -31,6 +31,7 @@ import com.slytechs.sdk.jnetworks.concurrency.TaskContext;
 import com.slytechs.sdk.jnetworks.concurrency.TaskExecutor;
 import com.slytechs.sdk.jnetworks.concurrency.TaskRecovery;
 import com.slytechs.sdk.jnetworks.device.Port;
+import com.slytechs.sdk.jnetworks.device.PortFilter;
 import com.slytechs.sdk.jnetworks.net.Capture;
 import com.slytechs.sdk.jnetworks.net.Inline;
 import com.slytechs.sdk.jnetworks.net.Transmit;
@@ -342,23 +343,23 @@ public class Showcase {
 
 			// Start capture only, on ethernet port
 			Capture capture = net.capture("capture-channel", "en0")
-					.filter("tcp") // Pcap BPF filter
-					.assignTo(capChannels) // Traffic distributed to this channel, need to fork a Task
+					.filter("udp") // Pcap BPF filter
+					.assignTo(capChannels) // Traffic distributed to these channels, need to fork multiple tasks
 					.apply(); // Start capture, no tx capabilities
 
 			Inline inline = net.inline("inline-ids-channel", "en1")
 					.filter("all") // Pcap BPF filter Pcap.setFilter()
-					.assignTo(idsChannels) // Traffic distributed to this channel, need to fork a task
+					.assignTo(idsChannels) // Traffic distributed to these channels, need to fork multiple tasks
 					.txEnable(true) // Default TX flags on each packet
 					.txPorts("en0") // Default TX port
 					.txImmediately() // Do not preserve IFG
 					.apply(); // Start capture + tx-queue router
 
 			// Enable TX on all ETH ports that are UP
-			Transmit transmit = net.transmit("traffic-gen-channel", Port.ETHERNET.up())
+			Transmit transmit = net.transmit("traffic-gen-channel", PortFilter.ETHERNET.up())
 					.assignTo(genChannels) // Will provide empty buffers for pkt gen
 					.txEnable(true) // Default TX flags on each packet
-					.txPort("en0") // Default TX port
+					.txPort("en0") // Default TX port, can override in task worker on per-packet basis
 					.txImmediately() // Do not preserve IFG
 					.apply(); // Start buffers flowing and tx-queue packet router
 
@@ -368,7 +369,7 @@ public class Showcase {
 					.enableTcpReassembly(); // Shortcut for common use case
 
 			// Assign TCP traffic for ip/tcp processing
-			Capture tcpReassesmbled = net.capture("tcp-reassembled-capture", "en2")
+			Capture tcpReassesmbled = net.capture("tcp-reassembled-capture", "en0")
 					.filter("tcp") // limit to TCP traffic only
 					.assignTo(tcpChannels) // assign to protocol channel, will receive protocol objects not packets
 					.assignTo(tcpTokens) // Tokens sent to this token channel
@@ -411,6 +412,7 @@ public class Showcase {
 			} catch (Throwable e) {
 				e.printStackTrace();
 			}
+			
 			System.out.printf("Capture complete: %d packets%n", capture.metrics().packetsAssigned());
 
 		} catch (NetException e) {
