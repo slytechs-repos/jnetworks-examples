@@ -150,7 +150,7 @@ public class Showcase {
 			case FAST_RETRANSMIT -> state.detectCongestion(stream);
 			case DUPLICATE_ACK -> state.analyzeCongestion(stream);
 
-			// Per-channel disable - doesn't affect other channels - Automatic token pruning
+			// Per-channel disable - not interested in this token type - Automatic token pruning
 			default -> channel.disable(token.tokenType());
 			}
 
@@ -337,8 +337,8 @@ public class Showcase {
 			PacketChannel[] idsChannels = net.packetChannels("inline-ids-channel", 8);
 			PacketChannel[] genChannels = net.packetChannels("traffic-gen-channel", 4);
 
-			// A channel that will receive reassembled TCP segments
-			ProtocolChannel<TcpSegment>[] tcpChannels = net.protocolChannels("tcp-channel", 16, TcpSegment.class);
+			// The channels that will receive reassembled TCP segments
+			ProtocolChannel<TcpSegment>[] tcpChannels = net.protocolChannels("tcp-channel", 15, TcpSegment.class);
 			TokenChannel<TcpToken> tcpTokens = net.tokenChannel("analysis-tokens", TcpToken.class);
 
 			// Start capture only, on ethernet port
@@ -347,6 +347,7 @@ public class Showcase {
 					.assignTo(capChannels) // Traffic distributed to these channels, need to fork multiple tasks
 					.apply(); // Start capture, no tx capabilities
 
+			// Start inline capture-forward-transmit, en1 -> en0
 			Inline inline = net.inline("inline-ids-channel", "en1")
 					.filter("all") // Pcap BPF filter Pcap.setFilter()
 					.assignTo(idsChannels) // Traffic distributed to these channels, need to fork multiple tasks
@@ -355,7 +356,7 @@ public class Showcase {
 					.txImmediately() // Do not preserve IFG
 					.apply(); // Start capture + tx-queue router
 
-			// Enable TX on all ETH ports that are UP
+			// Enable TX on all ETH ports that are UP and generate custom traffic
 			Transmit transmit = net.transmit("traffic-gen-channel", PortFilter.ETHERNET.up())
 					.assignTo(genChannels) // Will provide empty buffers for pkt gen
 					.txEnable(true) // Default TX flags on each packet
@@ -368,8 +369,8 @@ public class Showcase {
 					.enableIpReassembly() // Shortcut or configure protocol fully with ProtocolStack.getProtocol(IpProtocol.class)
 					.enableTcpReassembly(); // Shortcut for common use case
 
-			// Assign TCP traffic for ip/tcp processing
-			Capture tcpReassesmbled = net.capture("tcp-reassembled-capture", "en0")
+			// Assign TCP traffic for IP/TCP processing
+			Capture tcpReassembled = net.capture("tcp-reassembled-capture", "en0")
 					.filter("tcp") // limit to TCP traffic only
 					.assignTo(tcpChannels) // assign to protocol channel, will receive protocol objects not packets
 					.assignTo(tcpTokens) // Tokens sent to this token channel
@@ -381,12 +382,12 @@ public class Showcase {
 			System.out.println("Selected ports for transmit: " + transmit.listPorts().stream()
 					.map(Port::name)
 					.collect(Collectors.joining(", ")));
-			System.out.println("Selected port for tcp stream reassembly: " + tcpReassesmbled.getPort());
+			System.out.println("Selected port for tcp stream reassembly: " + tcpReassembled.getPort());
 
-			// Manage and fork our workers
+			// Manage and fork our task workers try-with-resources for proper shutdown/error handling
 			try (TaskExecutor executor = net.executor("packet-tasks")) {
 				
-				// How to handle errors if not handled inside the task worker, or use defaults
+				// How to handle errors if not handled inside the task worker, or can use defaults
 				executor.onTaskException(this::handleErrors)
 						.maxRestarts(3)
 						.restartDelay(Duration.ofSeconds(1));
@@ -399,19 +400,17 @@ public class Showcase {
 				executor.fork(capChannels, this::capturedPackets) // 4 workers
 						.fork(idsChannels, this::intrusionDetection) // 8 workers
 						.fork(genChannels, en0, en1, this::generateTraffic) // Can pass multiple args too, 4 workers
-						.fork(tcpChannels, this::processTcpStreams) // 16 workers
+						.fork(tcpChannels, this::processTcpStreams) // 15 workers
 						.fork(tcpTokens, this::analyzeTcpTokens) // 1 worker
 						.shutdownAfter(Duration.ofMinutes(5)) // Shutdown the group in 5 minutes
-						.awaitCompletion(); // And wait for group to shutdown
+						.awaitCompletion(); // Wait for this task group to shutdown, 32 workers
 				
-				// In all, we started 33 worker threads, all under a single main group
 				// Can have sub-groups executor.group("new group").fork()...
-				// Tested with 1 million virtual worker threads under Pcap backend
 				// Workers can be affinity locked to DPDK LCORE threads
 
-			} catch (Throwable e) {
+			} catch (InterruptedException e) {
 				e.printStackTrace();
-			}
+			} 
 			
 			System.out.printf("Capture complete: %d packets%n", capture.metrics().packetsAssigned());
 
