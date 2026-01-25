@@ -150,7 +150,8 @@ public class Showcase {
 			case FAST_RETRANSMIT -> state.detectCongestion(stream);
 			case DUPLICATE_ACK -> state.analyzeCongestion(stream);
 
-			// Per-channel disable - not interested in this token type - Automatic token pruning
+			// Per-channel disable - not interested in this token type - Automatic token
+			// pruning
 			default -> channel.disable(token.tokenType());
 			}
 
@@ -325,6 +326,46 @@ public class Showcase {
 		}
 	}
 
+	/**
+	 * Comprehensive and somewhat complex showcase of various use-cases for traffic
+	 * capture, inline retransmission, traffic generation and specific protocol
+	 * handling and analysis. Single use applications do not neccessarily need to
+	 * utilize all of these features all at once.
+	 * 
+	 * <p>
+	 * See HelloCapture example for a simpler usage example.
+	 * </p>
+	 * 
+	 * <p>
+	 * This example demonstrates the common functionality available across all 3
+	 * backends/implementations (PCAP, DPDK and Napatech NTAPI software). Backend
+	 * specific overrides and hardware offloads are fully utilized and available for
+	 * user configuration.
+	 * </p>
+	 * <p>
+	 * For other backends, the setup pattern is as follows:
+	 * {@snippet :
+	 * try (Pcap pcap = new PcapBackend(settings)) {}
+	 * try (Dpdk dpdk = new DpdkBackend(settings)) {}
+	 * try (Ntapi ntapi = new NtapiBackend(settings)) {}
+	 * try (Net net = new DpdkBackend(settings)) {} // For generic functionality using DPDK software
+	 * }
+	 * With each pattern, you work with specific subclass which provides additional
+	 * methods and functionality which may not be portable to other backends.
+	 * </p>
+	 * <p>
+	 * For example:
+	 * {@snippet :
+	 * try (Dpdk dpdk = new DpdkBackend()) {
+	 * 	PacketChannel[] channels = dpdk.packetChannels("example", 4); // Create 4 packet channels
+	 *  	DpdkCapture capture = dpdk.capture("my capture", PortFilter.ETHERNET.active().first())
+	 *  		.assignTo(channels) // Create 4 rx-queues, one for each channel
+	 *  		.lcore(4) // LCORE 0 through 3 affinity locked, when forked will use a DPDK assigned LCORE threads
+	 *  		.apply(); // Applies a single rx-queue on first active (with traffic) capable DPDK port.
+	 * }
+	 * }
+	 * </p>
+	 */
 	public void run() {
 		// Searches for commercial license or fallback on community license
 		Net.activateLicense();
@@ -333,16 +374,21 @@ public class Showcase {
 		// use Ntapi with Napatech SmartNIC configured adapters/Ports
 		try (Net net = new PcapBackend()) {
 
+			// Packet channels will receive packets (captured, dissected, analyzed or empty
+			// for transmit)
 			PacketChannel[] capChannels = net.packetChannels("capture-channel", 4);
 			PacketChannel[] idsChannels = net.packetChannels("inline-ids-channel", 8);
 			PacketChannel[] genChannels = net.packetChannels("traffic-gen-channel", 4);
 
 			// The channels that will receive reassembled TCP segments
 			ProtocolChannel<TcpSegment>[] tcpChannels = net.protocolChannels("tcp-channel", 15, TcpSegment.class);
+
+			// Tokens are lightweight, stateless analysis objects (16+ bytes). Many token
+			// types available.
 			TokenChannel<TcpToken> tcpTokens = net.tokenChannel("analysis-tokens", TcpToken.class);
 
 			// Start capture only, on ethernet port
-			Capture capture = net.capture("capture-channel", "en0")
+			Capture capture = net.capture("udp-capture-channel", "en0")
 					.filter("udp") // Pcap BPF filter
 					.assignTo(capChannels) // Traffic distributed to these channels, need to fork multiple tasks
 					.apply(); // Start capture, no tx capabilities
@@ -366,7 +412,8 @@ public class Showcase {
 
 			// Demonstrate the protocol stack usage
 			ProtocolStack stack = new ProtocolStack() // Enables IPF/TCP reassembly
-					.enableIpReassembly() // Shortcut or configure protocol fully with ProtocolStack.getProtocol(IpProtocol.class)
+					.enableIpReassembly() // Shortcut or configure protocol fully with
+											// ProtocolStack.getProtocol(IpProtocol.class)
 					.enableTcpReassembly(); // Shortcut for common use case
 
 			// Assign TCP traffic for IP/TCP processing
@@ -384,10 +431,12 @@ public class Showcase {
 					.collect(Collectors.joining(", ")));
 			System.out.println("Selected port for tcp stream reassembly: " + tcpReassembled.getPort());
 
-			// Manage and fork our task workers try-with-resources for proper shutdown/error handling
+			// Manage and fork our task workers try-with-resources for proper shutdown/error
+			// handling
 			try (TaskExecutor executor = net.executor("packet-tasks")) {
-				
-				// How to handle errors if not handled inside the task worker, or can use defaults
+
+				// How to handle errors if not handled inside the task worker, or can use
+				// defaults
 				executor.onTaskException(this::handleErrors)
 						.maxRestarts(3)
 						.restartDelay(Duration.ofSeconds(1));
@@ -404,14 +453,14 @@ public class Showcase {
 						.fork(tcpTokens, this::analyzeTcpTokens) // 1 worker
 						.shutdownAfter(Duration.ofMinutes(5)) // Shutdown the group in 5 minutes
 						.awaitCompletion(); // Wait for this task group to shutdown, 32 workers
-				
+
 				// Can have sub-groups executor.group("new group").fork()...
 				// Workers can be affinity locked to DPDK LCORE threads
 
 			} catch (InterruptedException e) {
 				e.printStackTrace();
-			} 
-			
+			}
+
 			System.out.printf("Capture complete: %d packets%n", capture.metrics().packetsAssigned());
 
 		} catch (NetException e) {
