@@ -364,14 +364,14 @@ public class Showcase {
 
 			// Demonstrate the protocol stack usage
 			ProtocolStack stack = new ProtocolStack() // Enables IPF/TCP reassembly
-					.enableIpReassembly() // Shortcut or configure protocol fully with .get(IpProtocol.class)
-					.enableTcpReassembly(); // Shortcut for common usecase
+					.enableIpReassembly() // Shortcut or configure protocol fully with ProtocolStack.getProtocol(IpProtocol.class)
+					.enableTcpReassembly(); // Shortcut for common use case
 
 			// Assign TCP traffic for ip/tcp processing
 			Capture tcpReassesmbled = net.capture("tcp-reassembled-capture", "en2")
 					.filter("tcp") // limit to TCP traffic only
 					.assignTo(tcpChannels) // assign to protocol channel, will receive protocol objects not packets
-					.assignTo(tcpTokens)
+					.assignTo(tcpTokens) // Tokens sent to this token channel
 					.protocol(stack) // Use this protocol stack for protocol level processing
 					.apply();
 
@@ -382,26 +382,31 @@ public class Showcase {
 					.collect(Collectors.joining(", ")));
 			System.out.println("Selected port for tcp stream reassembly: " + tcpReassesmbled.getPort());
 
+			// Manage and fork our workers
 			try (TaskExecutor executor = net.executor("packet-tasks")) {
+				
+				// How to handle errors if not handled inside the task worker, or use defaults
 				executor.onTaskException(this::handleErrors)
 						.maxRestarts(3)
 						.restartDelay(Duration.ofSeconds(1));
 
+				// Get some port information for our traffic generator
 				Port en0 = net.getPort("en0");
 				Port en1 = net.getPort("en1");
-
-				net.setup(idsChannels)
-						.activate()
-						.apply();
 
 				// Use different fork methods to attach task workers to channels
 				executor.fork(capChannels, this::capturedPackets) // 4 workers
 						.fork(idsChannels, this::intrusionDetection) // 8 workers
 						.fork(genChannels, en0, en1, this::generateTraffic) // Can pass multiple args too, 4 workers
 						.fork(tcpChannels, this::processTcpStreams) // 16 workers
-						.fork(tcpTokens, this::analyzeTcpTokens) // 16 workers
+						.fork(tcpTokens, this::analyzeTcpTokens) // 1 worker
 						.shutdownAfter(Duration.ofMinutes(5)) // Shutdown the group in 5 minutes
 						.awaitCompletion(); // And wait for group to shutdown
+				
+				// In all, we started 33 worker threads, all under a single main group
+				// Can have sub-groups executor.group("new group").fork()...
+				// Tested with 1 million virtual worker threads under Pcap backend
+				// Workers can be affinity locked to DPDK LCORE threads
 
 			} catch (Throwable e) {
 				e.printStackTrace();
