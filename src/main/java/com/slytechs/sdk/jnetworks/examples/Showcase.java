@@ -66,6 +66,10 @@ public class Showcase {
 	 * Our showcase state stub. Implement to handle real use-cases.
 	 */
 	interface State {
+		static State createFromStream(FlowKey flowKey) {
+			throw new UnsupportedOperationException("Need to implement real state here");
+		}
+
 		void analyzeCongestion(TcpStream stream);
 
 		void detectAnomaly(TcpStream stream, String anomaly);
@@ -80,7 +84,10 @@ public class Showcase {
 
 		void handleConnectionStart(TcpStream stream);
 
+		void markForEviction();
+
 		void monitorPerformance(TcpStream stream);
+
 	}
 
 	public static void main(String[] args) {
@@ -130,9 +137,12 @@ public class Showcase {
 
 			switch (token.tokenType()) {
 			case STREAM_SYN -> state.handleConnectionStart(stream);
-			case STREAM_FIN -> state.handleConnectionEnd(stream);
+			case STREAM_FIN -> {
+				state.handleConnectionEnd(stream);
+				state.markForEviction(); // Flag for cleanup
+			}
+			case STREAM_TIMEOUT -> stateMap.remove(stream.flowKey()); // Immediate removal
 			case SEGMENT_OUT_OF_ORDER -> state.detectAnomaly(stream, "OOO");
-			case SEGMENT_TIMEOUT -> state.detectAnomaly(stream, "Timeout");
 			case WINDOW_RESIZE -> state.monitorPerformance(stream);
 			case STREAM_RST -> state.handleConnectionReset(stream);
 			case RETRANSMIT -> state.detectLoss(stream);
@@ -299,6 +309,10 @@ public class Showcase {
 		while (channel.isActive()) {
 			TcpSegment segment = channel.acquire();
 			TcpStream stream = segment.tcpStream();
+
+			// Create state on first segment of flow
+			if (!stateMap.containsKey(stream.flowKey()))
+				stateMap.computeIfAbsent(stream.flowKey(), State::createFromStream);
 
 			if (stream.isClient()) {
 				System.out.println("Received client request");
