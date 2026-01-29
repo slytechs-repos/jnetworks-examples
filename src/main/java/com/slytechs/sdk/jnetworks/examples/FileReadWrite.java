@@ -34,17 +34,114 @@ import com.slytechs.sdk.protocol.core.Packet;
 import com.slytechs.sdk.protocol.core.stack.ProtocolStack;
 
 /**
- * Simple capture example for jNetWorks SDK.
- * 
+ * Demonstrates advanced file reading and writing with channel-based processing.
+ *
  * <p>
- * Demonstrates basic packet capture using the iterator API. Iterators allow
- * simplified session management, single threaded capture and processing without
- * any need for more advanced worker or thread management. Perfect for one off
- * jobs, near one-liners, and script or batch processing.
- * 
- * <p>
- * The entire example executes in the main platform thread.
+ * The jNetworks storage API provides unified access to diverse storage
+ * technologies and output formats through a flexible three-tier architecture:
  * </p>
+ * 
+ * <h2>Storage Architecture</h2>
+ * 
+ * <pre>
+ * Storage (Backend) → Volume (Mount Point) → NetFile (File Entity)
+ * </pre>
+ * 
+ * <h2>What are SILOs?</h2>
+ * <p>
+ * SILO (Structured Independent Log Output) plugins transform packet capture
+ * data into different output formats without modifying the original capture.
+ * Common use cases:
+ * </p>
+ * <ul>
+ * <li><b>Suricata EVE:</b> Convert PCAP to Suricata's EVE JSON format for SIEM
+ * ingestion</li>
+ * <li><b>Zeek Logs:</b> Generate Zeek-compatible logs from packet captures</li>
+ * <li><b>Parquet:</b> Export to columnar format for analytics and data
+ * science</li>
+ * <li><b>Elasticsearch:</b> Stream packets directly to Elasticsearch for
+ * real-time search</li>
+ * <li><b>Custom JSON:</b> Transform to application-specific JSON schemas</li>
+ * </ul>
+ * 
+ * <h2>Three Initialization Patterns</h2>
+ * 
+ * <h3>Pattern 1: SPI Discovery (Recommended)</h3>
+ * <p>
+ * Storage provider is automatically discovered from the mount point URI. The
+ * storage implementation is loaded via Java SPI based on URI scheme.
+ * </p>
+ * 
+ * {@snippet :
+ * // Local filesystem - discovers UnixStorage
+ * try (Volume vol = Storage.mount("/captures")) {
+ * 	// ... use volume
+ * }
+ * 
+ * // S3 storage - discovers S3Storage plugin
+ * try (Volume vol = Storage.mount("s3://my-bucket/captures")) {
+ * 	// ... use volume
+ * }
+ * 
+ * // ExaScale distributed - discovers ExaStorage plugin
+ * try (Volume vol = Storage.mount("exa://cluster-east/prod")) {
+ * 	// ... use volume
+ * }
+ * }
+ * 
+ * <h3>Pattern 2: Explicit Storage with Multiple Volumes</h3>
+ * <p>
+ * Create storage instance first, then mount multiple volumes. Useful when you
+ * need shared configuration, credentials, or connection pooling across volumes.
+ * </p>
+ * 
+ * {@snippet :
+ * // Explicit storage with credentials and settings
+ * try (ExaStorage storage = new ExaStorage(credentials, settings)) {
+ * 	storage.connect();
+ * 
+ * 	Volume prod = storage.mount("/prod");
+ * 	Volume archive = storage.mount("/archive");
+ * 
+ * 	// Both volumes share storage backend
+ * 	// ... use volumes
+ * 
+ * 	prod.unmount();
+ * 	archive.unmount();
+ * }
+ * }
+ * 
+ * <h3>Pattern 3: Direct Volume Instantiation (Shortcut)</h3>
+ * <p>
+ * Skip Storage layer entirely and instantiate Volume directly. Storage backend
+ * is created implicitly and managed automatically. Simplest pattern for
+ * single-volume usage.
+ * </p>
+ * 
+ * {@snippet :
+ * // UnixVolume implies UnixStorage backend
+ * try (Volume vol = new UnixVolume("/captures")) {
+ * 	// UnixStorage created and managed internally
+ * 	// ... use volume
+ * } // Auto-unmount and storage cleanup
+ * 
+ * // ExaVolume implies ExaStorage backend
+ * try (Volume vol = new ExaVolume("cluster-east:/prod", credentials)) {
+ * 	// ... use volume
+ * }
+ * }
+ * 
+ * <h2>This Example</h2>
+ * <p>
+ * Demonstrates Pattern 1 (SPI discovery) with channel-based processing, showing
+ * how to:
+ * </p>
+ * <ul>
+ * <li>Open and filter existing capture files</li>
+ * <li>Create new files with sharding and indexing</li>
+ * <li>Assign channels for multi-threaded processing</li>
+ * <li>Process packets through worker tasks</li>
+ * </ul>
  *
  * @author Mark Bednarczyk [mark@slytechs.com]
  * @author Sly Technologies Inc.
@@ -59,8 +156,16 @@ public class FileReadWrite {
 		// Searches for commercial license or fallback on community license
 		Net.activateLicense();
 
-		// use DpdkBackend with DPDK capable NICs/Ports
-		// use NtapiBackend with Napatech SmartNIC configured adapters/Ports
+		// @formatter:off
+		// Other storage types:
+		//		- UnixStorage    - Local filesystem
+		//		- S3Storage      - AWS S3, MinIO
+		//		- ExaStorage     - Distributed ExaVolume
+		//		- AzureStorage   - Azure Blob
+		//		- GcsStorage     - Google Cloud Storage
+		// @formatter:on
+
+		// Use SPI to discovery storage and volume type
 		try (Volume vol = Storage.mount("captures")) {
 
 			PacketChannel reader = vol.packetChannel("mycapture");
