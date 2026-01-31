@@ -37,10 +37,12 @@ import com.slytechs.sdk.protocol.core.filter.VlanFilter;
  * DPDK (rte_flow/eBPF), and Napatech (NTPL). Filters are defined once using the
  * {@link ProtocolFilter} DSL and compiled to backend-specific
  * {@link PacketFilter} implementations.
+ * </p>
  * 
  * <h2>API Design</h2>
  * <p>
  * The filter API follows a two-phase pattern:
+ * </p>
  * <ol>
  * <li><b>Define</b> - Use {@link PacketFilter} static factories to build a
  * {@link ProtocolFilter} DSL chain</li>
@@ -88,13 +90,6 @@ import com.slytechs.sdk.protocol.core.filter.VlanFilter;
  * PacketFilter filter = capture.getFilter();
  * }
  * 
- * <h2>Debug Methods</h2>
- * <p>
- * The {@link ProtocolFilter#onExpression} and
- * {@link ProtocolFilter#onExpressionAssert} methods are provided for
- * development and testing purposes only. These methods intercept the expression
- * during the build phase and should not be used in production code. Use
- * {@link PacketFilter#toExpression()} on the compiled filter instead.
  *
  * @author Mark Bednarczyk [mark@slytechs.com]
  * @author Sly Technologies Inc
@@ -130,12 +125,12 @@ public class PacketFilterExamples {
 		System.out.println("-- vlan -- ");
 
 		expectedOutput = "vlan and vlan 111";
-		dsl = PacketFilter
-				.vlan(v -> v.vid(111))
-				.onExpressionAssert(expectedOutput::equals);
+		dsl = PacketFilter.vlan(v -> v.vid(111));
 
 		PacketFilter filter = new BpfFilterBuilder().build(dsl);
 		System.out.println(filter.toExpression());
+
+		assert expectedOutput.equals(filter.toExpression());
 	}
 
 	/**
@@ -172,11 +167,12 @@ public class PacketFilterExamples {
 				.anyOf(
 						Ip4Filter.protocol(6),
 						Ip4Filter.protocol(17))
-				.tcp(tcp -> tcp.dstPort(443))
-				.onExpressionAssert(expectedOutput::equals);
+				.tcp(tcp -> tcp.dstPort(443));
 
 		PacketFilter filter = new BpfFilterBuilder().build(dsl);
 		System.out.println(filter.toExpression());
+
+		assert expectedOutput.equals(filter.toExpression());
 	}
 
 	/**
@@ -201,11 +197,12 @@ public class PacketFilterExamples {
 		expectedOutput = "ip and udp and (udp src port 53 or udp dst port 53)";
 		dsl = PacketFilter
 				.ip4()
-				.udp(udp -> udp.port(53))
-				.onExpressionAssert(expectedOutput::equals);
+				.udp(udp -> udp.port(53));
 
 		PacketFilter filter = new BpfFilterBuilder().build(dsl);
 		System.out.println(filter.toExpression());
+
+		assert expectedOutput.equals(filter.toExpression());
 	}
 
 	/**
@@ -227,13 +224,12 @@ public class PacketFilterExamples {
 		System.out.println("-- esp -- ");
 
 		expectedOutput = "ip and ip proto 50";
-		dsl = PacketFilter
-				.ip4()
-				.esp()
-				.onExpressionAssert(expectedOutput::equals);
+		dsl = PacketFilter.ip4().esp();
 
 		PacketFilter filter = new BpfFilterBuilder().build(dsl);
 		System.out.println(filter.toExpression());
+
+		assert expectedOutput.equals(filter.toExpression());
 	}
 
 	/**
@@ -257,11 +253,12 @@ public class PacketFilterExamples {
 		expectedOutput = "ip and ip proto 50 and ip[20:4] == 0x12345678";
 		dsl = PacketFilter
 				.ip4()
-				.esp(ipsec -> ipsec.espSpi(0x12345678))
-				.onExpressionAssert(expectedOutput::equals);
+				.esp(ipsec -> ipsec.espSpi(0x12345678));
 
 		PacketFilter filter = new BpfFilterBuilder().build(dsl);
 		System.out.println(filter.toExpression());
+
+		assert expectedOutput.equals(filter.toExpression());
 	}
 
 	/**
@@ -285,11 +282,12 @@ public class PacketFilterExamples {
 		expectedOutput = "ip and ip proto 51 and ip[24:4] == 0xdeadbeef";
 		dsl = PacketFilter
 				.ip4()
-				.ah(ipsec -> ipsec.ahSpi(0xDEADBEEF))
-				.onExpressionAssert(expectedOutput::equals);
+				.ah(ipsec -> ipsec.ahSpi(0xDEADBEEF));
 
 		PacketFilter filter = new BpfFilterBuilder().build(dsl);
 		System.out.println(filter.toExpression());
+
+		assert expectedOutput.equals(filter.toExpression());
 	}
 
 	/**
@@ -320,11 +318,12 @@ public class PacketFilterExamples {
 						VlanFilter.vid(2222))
 				.anyOf(
 						PacketFilter.ip4(),
-						PacketFilter.ip6())
-				.onExpressionAssert(expectedOutput::equals);
+						PacketFilter.ip6());
 
 		PacketFilter filter = new BpfFilterBuilder().build(dsl);
 		System.out.println(filter.toExpression());
+
+		assert expectedOutput.equals(filter.toExpression());
 	}
 
 	/**
@@ -356,11 +355,12 @@ public class PacketFilterExamples {
 		expectedOutput = "mpls and mpls label 100 and ip";
 		dsl = PacketFilter
 				.mpls(mpls -> mpls.label(100))
-				.ip4()
-				.onExpressionAssert(expectedOutput::equals);
+				.ip4();
 
 		PacketFilter bpfFilter = new BpfFilterBuilder().build(dsl);
 		System.out.println(bpfFilter.toExpression());
+
+		assert expectedOutput.equals(bpfFilter.toExpression());
 
 		// DPDK rte_flow backend
 		dsl = PacketFilter
@@ -405,49 +405,54 @@ public class PacketFilterExamples {
 
 		// Filter by host
 		expectedOutput = "host 10.0.0.1 and tcp";
-		dsl = PacketFilter.host("10.0.0.1")
-				.tcp()
-				.onExpressionAssert(expectedOutput::equals);
+		dsl = PacketFilter
+				.host("10.0.0.1")
+				.tcp();
 
 		PacketFilter filter = new BpfFilterBuilder().build(dsl);
 		System.out.println(filter.toExpression());
+		assert expectedOutput.equals(filter.toExpression());
 
 		// Filter by subnet
 		expectedOutput = "src net 192.168.0.0/16 and dst net 10.0.0.0/8";
-		dsl = PacketFilter.srcNet("192.168.0.0/16")
-				.dstNet("10.0.0.0/8")
-				.onExpressionAssert(expectedOutput::equals);
+		dsl = PacketFilter
+				.srcNet("192.168.0.0/16")
+				.dstNet("10.0.0.0/8");
 
 		filter = new BpfFilterBuilder().build(dsl);
 		System.out.println(filter.toExpression());
+		assert expectedOutput.equals(filter.toExpression());
 
 		// Port range
 		expectedOutput = "ip and portrange 8000-9000";
-		dsl = PacketFilter.ip4()
-				.portRange(8000, 9000)
-				.onExpressionAssert(expectedOutput::equals);
+		dsl = PacketFilter
+				.ip4()
+				.portRange(8000, 9000);
 
 		filter = new BpfFilterBuilder().build(dsl);
 		System.out.println(filter.toExpression());
+		assert expectedOutput.equals(filter.toExpression());
 
 		// Large packets only
 		expectedOutput = "ip and greater 1000";
-		dsl = PacketFilter.ip4()
-				.lengthGreater(1000)
-				.onExpressionAssert(expectedOutput::equals);
+		dsl = PacketFilter
+				.ip4()
+				.lengthGreater(1000);
 
 		filter = new BpfFilterBuilder().build(dsl);
 		System.out.println(filter.toExpression());
+		assert expectedOutput.equals(filter.toExpression());
 
 		// Multicast traffic
 		expectedOutput = "ip and multicast and udp";
-		dsl = PacketFilter.ip4()
+		dsl = PacketFilter
+				.ip4()
 				.multicast()
-				.udp()
-				.onExpressionAssert(expectedOutput::equals);
+				.udp();
 
 		filter = new BpfFilterBuilder().build(dsl);
 		System.out.println(filter.toExpression());
+		assert expectedOutput.equals(filter.toExpression());
 	}
 
 	/**
@@ -483,11 +488,11 @@ public class PacketFilterExamples {
 				VlanFilter.vid(4444))
 				.anyOf(
 						PacketFilter.ip4(),
-						PacketFilter.ip6())
-				.onExpressionAssert(expectedOutput::equals);
+						PacketFilter.ip6());
 
 		PacketFilter filter = new BpfFilterBuilder().build(dsl);
 		System.out.println(filter.toExpression());
+		assert expectedOutput.equals(filter.toExpression());
 
 		// VLANs with IPSec and subnet
 		expectedOutput = "(vlan 3333 or vlan 4444) and ip and ip proto 50 and src net 10.0.0.0/8";
@@ -496,26 +501,21 @@ public class PacketFilterExamples {
 				VlanFilter.vid(4444))
 				.ip4()
 				.esp()
-				.srcNet("10.0.0.0/8")
-				.onExpressionAssert(expectedOutput::equals);
+				.srcNet("10.0.0.0/8");
 
 		filter = new BpfFilterBuilder().build(dsl);
 		System.out.println(filter.toExpression());
+		assert expectedOutput.equals(filter.toExpression());
 	}
 
 	/**
 	 * Runs all filter examples with output validation.
 	 * 
 	 * <p>
-	 * Each example validates its output against expected values using
-	 * {@code onExpressionAssert()}. Any mismatch throws
-	 * {@link IllegalStateException}.
-	 * 
-	 * <p>
-	 * <b>Note:</b> The {@code onExpression()} and {@code onExpressionAssert()}
-	 * methods on {@link ProtocolFilter} are for development and testing only. In
-	 * production code, use {@link PacketFilter#toExpression()} on the compiled
-	 * filter returned by the builder.
+	 * Each example validates its output against expected values using assert
+	 * statement. Any mismatch throws an assertion exception. To enable on command
+	 * line add VM arg {@code --ea}.
+	 * </p>
 	 *
 	 * @param args command line arguments (unused)
 	 */
