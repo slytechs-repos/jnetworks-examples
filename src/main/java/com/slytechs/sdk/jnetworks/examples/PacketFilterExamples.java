@@ -90,6 +90,53 @@ import com.slytechs.sdk.protocol.core.filter.VlanFilter;
  * PacketFilter filter = capture.getFilter();
  * }
  * 
+ * <p>
+ * Console output from all of the examples, with jnetworks-dpdk enabled:
+ * </p>
+ * 
+ * <pre><code>
+-- vlan -- 
+vlan and vlan 111
+-- tls -- 
+ether and ether proto 0x0800 and (ip proto 6 or ip proto 17) and tcp and tcp dst port 443
+-- udp -- 
+ip and udp and (udp src port 53 or udp dst port 53)
+-- esp -- 
+ip and ip proto 50
+-- ipSecEsp -- 
+ip and ip proto 50 and ip[20:4] == 0x12345678
+-- ah -- 
+ip and ip proto 51 and ip[24:4] == 0xdeadbeef
+-- vlanIp -- 
+(vlan 2222 or vlan 3333) and (ip or ip6)
+-- mpls -- 
+mpls and mpls label 100 and ip
+/&ast; RTE Flow Pattern &ast;/
+struct rte_flow_item pattern[] = {
+    { .type = RTE_FLOW_ITEM_TYPE_MPLS, .spec = &spec_0, .mask = &mask_0 },
+    { .type = RTE_FLOW_ITEM_TYPE_IPV4 },
+    { .type = RTE_FLOW_ITEM_TYPE_END },
+};
+
+/&ast; Spec/Mask Structures &ast;/
+struct rte_flow_item_mpls spec_0 = { .label_tc_s = { 0x00, 0x06, 0x40 } };
+struct rte_flow_item_mpls spec_1 = { .label_tc_s = { 0x00, 0x00, 0x01 } };
+struct rte_flow_item_mpls mask_0 = { .label_tc_s = { 0xFF, 0xFF, 0xF0 } };
+struct rte_flow_item_mpls mask_1 = { .label_tc_s = { 0x00, 0x00, 0x01 } };
+
+-- hostNet -- 
+host 10.0.0.1 and tcp
+src net 192.168.0.0/16 and dst net 10.0.0.0/8
+ip and portrange 8000-9000
+ip and greater 1000
+ip and multicast and udp
+-- vlans -- 
+(vlan 3333 or vlan 4444) and (ip or ip6)
+(vlan 3333 or vlan 4444) and ip and ip proto 50 and src net 10.0.0.0/8
+
+All filter examples passed.
+ * </code></pre>
+ * 
  *
  * @author Mark Bednarczyk [mark@slytechs.com]
  * @author Sly Technologies Inc
@@ -299,11 +346,11 @@ public class PacketFilterExamples {
 	 * 
 	 * {@snippet :
 	 * ProtocolFilter dsl = PacketFilter
-	 * 		.anyOf(VlanFilter.vid(1111), VlanFilter.vid(2222))
+	 * 		.anyOf(VlanFilter.vid(2222), VlanFilter.vid(3333))
 	 * 		.anyOf(PacketFilter.ip4(), PacketFilter.ip6());
 	 *
 	 * PcapPacketFilter filter = new BpfFilterBuilder().build(dsl);
-	 * // filter.toExpression(): "(vlan 1111 or vlan 2222) and (ip or ip6)"
+	 * // filter.toExpression(): "(vlan 2222 or vlan 3333) and (ip or ip6)"
 	 * }
 	 * 
 	 * @see VlanFilter
@@ -311,11 +358,11 @@ public class PacketFilterExamples {
 	static void vlanIp() {
 		System.out.println("-- vlanIp -- ");
 
-		expectedOutput = "(vlan 1111 or vlan 2222) and (ip or ip6)";
+		expectedOutput = "(vlan 2222 or vlan 3333) and (ip or ip6)";
 		dsl = PacketFilter
 				.anyOf(
-						VlanFilter.vid(1111),
-						VlanFilter.vid(2222))
+						VlanFilter.vid(2222),
+						VlanFilter.vid(3333))
 				.anyOf(
 						PacketFilter.ip4(),
 						PacketFilter.ip6());
