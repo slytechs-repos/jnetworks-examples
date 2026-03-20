@@ -26,7 +26,7 @@ import com.slytechs.sdk.jnetworks.channels.PacketChannel;
 import com.slytechs.sdk.jnetworks.concurrency.TaskExecutor;
 import com.slytechs.sdk.jnetworks.net.CaptureMetrics;
 import com.slytechs.sdk.jnetworks.storage.NetFile;
-import com.slytechs.sdk.jnetworks.storage.Storage;
+import com.slytechs.sdk.jnetworks.storage.StorageException;
 import com.slytechs.sdk.jnetworks.storage.index.IndexLocation;
 import com.slytechs.sdk.jnetworks.storage.index.IndexType;
 import com.slytechs.sdk.jnetworks.storage.volumes.Volume;
@@ -165,8 +165,8 @@ public class FileReadWrite {
 		//		- GcsStorage     - Google Cloud Storage
 		// @formatter:on
 
-		// Use SPI to discovery storage and volume type
-		try (Volume vol = Storage.mount("captures")) {
+		// Use SPI to discover storage and volume type
+		try (Volume vol = Volume.mount("/captures")) {
 
 			PacketChannel reader = vol.packetChannel("mycapture");
 			NetFile input = vol.open("mycapture.pcapng", READ)
@@ -197,7 +197,7 @@ public class FileReadWrite {
 			CaptureMetrics metrics = input.metrics();
 			System.out.printf("Capture complete: %d packets%n", metrics.packetsReceived());
 
-		} catch (InterruptedException | IOException e) {
+		} catch (InterruptedException | IOException | StorageException e) {
 			e.printStackTrace();
 		}
 	}

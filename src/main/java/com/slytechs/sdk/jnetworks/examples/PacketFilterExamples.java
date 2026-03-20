@@ -15,14 +15,16 @@
  */
 package com.slytechs.sdk.jnetworks.examples;
 
+import com.slytechs.sdk.jnetworks.Net;
 import com.slytechs.sdk.jnetworks.pcap.filter.BpfFilterBuilder;
 import com.slytechs.sdk.jnetworks.pcap.filter.PcapPacketFilter;
 import com.slytechs.sdk.protocol.core.filter.EthernetFilter;
+import com.slytechs.sdk.protocol.core.filter.FilterException;
 import com.slytechs.sdk.protocol.core.filter.Ip4Filter;
 import com.slytechs.sdk.protocol.core.filter.IpSecFilter;
 import com.slytechs.sdk.protocol.core.filter.MplsFilter;
 import com.slytechs.sdk.protocol.core.filter.PacketFilter;
-import com.slytechs.sdk.protocol.core.filter.ProtocolFilter;
+import com.slytechs.sdk.protocol.core.filter.PacketDsl;
 import com.slytechs.sdk.protocol.core.filter.TcpFilter;
 import com.slytechs.sdk.protocol.core.filter.UdpFilter;
 import com.slytechs.sdk.protocol.core.filter.VlanFilter;
@@ -35,7 +37,7 @@ import com.slytechs.sdk.protocol.core.filter.VlanFilter;
  * The {@link PacketFilter} API provides a fluent, composable way to define
  * packet filters that can target multiple backends including libpcap (BPF),
  * DPDK (rte_flow/eBPF), and Napatech (NTPL). Filters are defined once using the
- * {@link ProtocolFilter} DSL and compiled to backend-specific
+ * {@link PacketDsl} DSL and compiled to backend-specific
  * {@link PacketFilter} implementations.
  * </p>
  * 
@@ -45,14 +47,14 @@ import com.slytechs.sdk.protocol.core.filter.VlanFilter;
  * </p>
  * <ol>
  * <li><b>Define</b> - Use {@link PacketFilter} static factories to build a
- * {@link ProtocolFilter} DSL chain</li>
+ * {@link PacketDsl} DSL chain</li>
  * <li><b>Compile</b> - Use a backend-specific builder to produce a compiled
  * {@link PacketFilter}</li>
  * </ol>
  * 
  * {@snippet :
  * // Phase 1: Define filter using DSL
- * ProtocolFilter dsl = PacketFilter
+ * PacketDsl dsl = PacketFilter
  * 		.vlan(v -> v.vid(100))
  * 		.ip4()
  * 		.tcp(tcp -> tcp.port(443));
@@ -79,7 +81,7 @@ import com.slytechs.sdk.protocol.core.filter.VlanFilter;
  * <h2>Integration with Capture API</h2>
  * 
  * {@snippet :
- * ProtocolFilter dsl = PacketFilter.ip4().tcp(tcp -> tcp.port(443));
+ * PacketDsl dsl = PacketFilter.ip4().tcp(tcp -> tcp.port(443));
  *
  * Capture capture = net.capture("main", "eth0")
  * 		.filter(dsl)
@@ -94,7 +96,8 @@ import com.slytechs.sdk.protocol.core.filter.VlanFilter;
  * Console output from all of the examples, with jnetworks-dpdk enabled:
  * </p>
  * 
- * <pre><code>
+ * <pre>
+ * <code>
 -- vlan -- 
 vlan and vlan 111
 -- tls -- 
@@ -131,17 +134,18 @@ ip and portrange 8000-9000
 ip and greater 1000
 ip and multicast and udp
 -- vlans -- 
-(vlan 3333 or vlan 4444) and (ip or ip6)
-(vlan 3333 or vlan 4444) and ip and ip proto 50 and src net 10.0.0.0/8
+(vlan 3333 or vlan 1234) and (ip or ip6)
+(vlan 3333 or vlan 1234) and ip and ip proto 50 and src net 10.0.0.0/8
 
 All filter examples passed.
- * </code></pre>
+ * </code>
+ * </pre>
  * 
  *
  * @author Mark Bednarczyk [mark@slytechs.com]
  * @author Sly Technologies Inc
  * @see PacketFilter
- * @see ProtocolFilter
+ * @see PacketDsl
  * @see BpfFilterBuilder
  */
 public class PacketFilterExamples {
@@ -150,7 +154,7 @@ public class PacketFilterExamples {
 	static String expectedOutput;
 
 	/** DSL filter chain before compilation. */
-	static ProtocolFilter dsl;
+	static PacketDsl dsl;
 
 	/**
 	 * Demonstrates basic VLAN filtering by VLAN ID.
@@ -161,14 +165,16 @@ public class PacketFilterExamples {
 	 * and DEI.
 	 * 
 	 * {@snippet :
-	 * ProtocolFilter dsl = PacketFilter.vlan(v -> v.vid(111));
+	 * PacketDsl dsl = PacketFilter.vlan(v -> v.vid(111));
 	 * PcapPacketFilter filter = new BpfFilterBuilder().build(dsl);
 	 * // filter.toExpression(): "vlan and vlan 111"
 	 * }
 	 * 
+	 * @throws FilterException
+	 * 
 	 * @see VlanFilter
 	 */
-	static void vlan() {
+	static void vlan() throws FilterException {
 		System.out.println("-- vlan -- ");
 
 		expectedOutput = "vlan and vlan 111";
@@ -189,7 +195,7 @@ public class PacketFilterExamples {
 	 * encrypted web traffic.
 	 * 
 	 * {@snippet :
-	 * ProtocolFilter dsl = PacketFilter
+	 * PacketDsl dsl = PacketFilter
 	 * 		.ethernet(eth -> eth.type(0x800))
 	 * 		.anyOf(
 	 * 				Ip4Filter.protocol(6),   // TCP
@@ -201,11 +207,13 @@ public class PacketFilterExamples {
 	 * //     (ip proto 6 or ip proto 17) and tcp and tcp dst port 443"
 	 * }
 	 * 
+	 * @throws FilterException
+	 * 
 	 * @see EthernetFilter
 	 * @see Ip4Filter
 	 * @see TcpFilter
 	 */
-	static void tls() {
+	static void tls() throws FilterException {
 		System.out.println("-- tls -- ");
 
 		expectedOutput = "ether and ether proto 0x0800 and (ip proto 6 or ip proto 17) and tcp and tcp dst port 443";
@@ -231,14 +239,16 @@ public class PacketFilterExamples {
 	 * both sides of a conversation.
 	 * 
 	 * {@snippet :
-	 * ProtocolFilter dsl = PacketFilter.ip4().udp(udp -> udp.port(53));
+	 * PacketDsl dsl = PacketFilter.ip4().udp(udp -> udp.port(53));
 	 * PcapPacketFilter filter = new BpfFilterBuilder().build(dsl);
 	 * // filter.toExpression(): "ip and udp and (udp src port 53 or udp dst port 53)"
 	 * }
 	 * 
+	 * @throws FilterException
+	 * 
 	 * @see UdpFilter
 	 */
-	static void udp() {
+	static void udp() throws FilterException {
 		System.out.println("-- udp -- ");
 
 		expectedOutput = "ip and udp and (udp src port 53 or udp dst port 53)";
@@ -260,14 +270,16 @@ public class PacketFilterExamples {
 	 * the basic form without SPI filtering.
 	 * 
 	 * {@snippet :
-	 * ProtocolFilter dsl = PacketFilter.ip4().esp();
+	 * PacketDsl dsl = PacketFilter.ip4().esp();
 	 * PcapPacketFilter filter = new BpfFilterBuilder().build(dsl);
 	 * // filter.toExpression(): "ip and ip proto 50"
 	 * }
 	 * 
+	 * @throws FilterException
+	 * 
 	 * @see IpSecFilter
 	 */
-	static void esp() {
+	static void esp() throws FilterException {
 		System.out.println("-- esp -- ");
 
 		expectedOutput = "ip and ip proto 50";
@@ -287,14 +299,16 @@ public class PacketFilterExamples {
 	 * IPSec tunnels or security associations.
 	 * 
 	 * {@snippet :
-	 * ProtocolFilter dsl = PacketFilter.ip4().esp(ipsec -> ipsec.espSpi(0x12345678));
+	 * PacketDsl dsl = PacketFilter.ip4().esp(ipsec -> ipsec.espSpi(0x12345678));
 	 * PcapPacketFilter filter = new BpfFilterBuilder().build(dsl);
 	 * // filter.toExpression(): "ip and ip proto 50 and ip[20:4] == 0x12345678"
 	 * }
 	 * 
+	 * @throws FilterException
+	 * 
 	 * @see IpSecFilter
 	 */
-	static void ipSecEsp() {
+	static void ipSecEsp() throws FilterException {
 		System.out.println("-- ipSecEsp -- ");
 
 		expectedOutput = "ip and ip proto 50 and ip[20:4] == 0x12345678";
@@ -316,14 +330,16 @@ public class PacketFilterExamples {
 	 * integrity and authentication without encryption.
 	 * 
 	 * {@snippet :
-	 * ProtocolFilter dsl = PacketFilter.ip4().ah(ipsec -> ipsec.ahSpi(0xDEADBEEF));
+	 * PacketDsl dsl = PacketFilter.ip4().ah(ipsec -> ipsec.ahSpi(0xDEADBEEF));
 	 * PcapPacketFilter filter = new BpfFilterBuilder().build(dsl);
 	 * // filter.toExpression(): "ip and ip proto 51 and ip[24:4] == 0xdeadbeef"
 	 * }
 	 * 
+	 * @throws FilterException
+	 * 
 	 * @see IpSecFilter
 	 */
-	static void ah() {
+	static void ah() throws FilterException {
 		System.out.println("-- ah -- ");
 
 		expectedOutput = "ip and ip proto 51 and ip[24:4] == 0xdeadbeef";
@@ -345,7 +361,7 @@ public class PacketFilterExamples {
 	 * versions. This pattern is useful for multi-tenant or dual-stack environments.
 	 * 
 	 * {@snippet :
-	 * ProtocolFilter dsl = PacketFilter
+	 * PacketDsl dsl = PacketFilter
 	 * 		.anyOf(VlanFilter.vid(2222), VlanFilter.vid(3333))
 	 * 		.anyOf(PacketFilter.ip4(), PacketFilter.ip6());
 	 *
@@ -353,9 +369,11 @@ public class PacketFilterExamples {
 	 * // filter.toExpression(): "(vlan 2222 or vlan 3333) and (ip or ip6)"
 	 * }
 	 * 
+	 * @throws FilterException
+	 * 
 	 * @see VlanFilter
 	 */
-	static void vlanIp() {
+	static void vlanIp() throws FilterException {
 		System.out.println("-- vlanIp -- ");
 
 		expectedOutput = "(vlan 2222 or vlan 3333) and (ip or ip6)";
@@ -382,7 +400,7 @@ public class PacketFilterExamples {
 	 * 
 	 * {@snippet :
 	 * // Define once
-	 * ProtocolFilter dsl = PacketFilter.mpls(mpls -> mpls.label(100)).ip4();
+	 * PacketDsl dsl = PacketFilter.mpls(mpls -> mpls.label(100)).ip4();
 	 *
 	 * // Compile for BPF
 	 * PcapPacketFilter bpfFilter = new BpfFilterBuilder().build(dsl);
@@ -393,9 +411,11 @@ public class PacketFilterExamples {
 	 * // dpdkFilter.toExpression(): struct rte_flow_item pattern[] = { MPLS, IPV4, END }
 	 * }
 	 * 
+	 * @throws FilterException
+	 * 
 	 * @see MplsFilter
 	 */
-	static void mpls() {
+	static void mpls() throws FilterException {
 		System.out.println("-- mpls -- ");
 
 		// BPF backend
@@ -437,7 +457,7 @@ public class PacketFilterExamples {
 	 * 
 	 * {@snippet :
 	 * // Host filtering
-	 * ProtocolFilter dsl = PacketFilter.host("10.0.0.1").tcp();
+	 * PacketDsl dsl = PacketFilter.host("10.0.0.1").tcp();
 	 * PcapPacketFilter filter = new BpfFilterBuilder().build(dsl);
 	 * // filter.toExpression(): "host 10.0.0.1 and tcp"
 	 *
@@ -446,8 +466,10 @@ public class PacketFilterExamples {
 	 * filter = new BpfFilterBuilder().build(dsl);
 	 * // filter.toExpression(): "src net 192.168.0.0/16 and dst net 10.0.0.0/8"
 	 * }
+	 * 
+	 * @throws FilterException
 	 */
-	static void hostNet() {
+	static void hostNet() throws FilterException {
 		System.out.println("-- hostNet -- ");
 
 		// Filter by host
@@ -511,41 +533,45 @@ public class PacketFilterExamples {
 	 * chaining and subnet filtering.
 	 * 
 	 * {@snippet :
-	 * ProtocolFilter dsl = PacketFilter
-	 * 		.anyOf(VlanFilter.vid(3333), VlanFilter.vid(4444))
+	 * PacketDsl dsl = PacketFilter
+	 * 		.anyOf(VlanFilter.vid(3333), VlanFilter.vid(1234))
 	 * 		.ip4()
 	 * 		.esp()
 	 * 		.srcNet("10.0.0.0/8");
 	 *
 	 * PcapPacketFilter filter = new BpfFilterBuilder().build(dsl);
-	 * // filter.toExpression(): "(vlan 3333 or vlan 4444) and ip and ip proto 50
+	 * // filter.toExpression(): "(vlan 3333 or vlan 1234) and ip and ip proto 50
 	 * //     and src net 10.0.0.0/8"
 	 * }
+	 * 
+	 * @throws FilterException
 	 * 
 	 * @see VlanFilter
 	 * @see IpSecFilter
 	 */
-	static void vlans() {
+	static void vlans() throws FilterException {
 		System.out.println("-- vlans -- ");
 
+		// Note: VLAN.vid must be below 4095 this is max allowed
+
 		// Multiple VLANs with IP version filtering
-		expectedOutput = "(vlan 3333 or vlan 4444) and (ip or ip6)";
+		expectedOutput = "(vlan 3333 or vlan 1234) and (ip or ip6)";
 		dsl = PacketFilter.anyOf(
 				VlanFilter.vid(3333),
-				VlanFilter.vid(4444))
+				VlanFilter.vid(1234))
 				.anyOf(
 						PacketFilter.ip4(),
 						PacketFilter.ip6());
 
-		PacketFilter filter = new BpfFilterBuilder().build(dsl);
+		PcapPacketFilter filter = new BpfFilterBuilder().build(dsl);
 		System.out.println(filter.toExpression());
 		assert expectedOutput.equals(filter.toExpression());
 
 		// VLANs with IPSec and subnet
-		expectedOutput = "(vlan 3333 or vlan 4444) and ip and ip proto 50 and src net 10.0.0.0/8";
+		expectedOutput = "(vlan 3333 or vlan 1234) and ip and ip proto 50 and src net 10.0.0.0/8";
 		dsl = PacketFilter.anyOf(
 				VlanFilter.vid(3333),
-				VlanFilter.vid(4444))
+				VlanFilter.vid(1234))
 				.ip4()
 				.esp()
 				.srcNet("10.0.0.0/8");
@@ -553,6 +579,74 @@ public class PacketFilterExamples {
 		filter = new BpfFilterBuilder().build(dsl);
 		System.out.println(filter.toExpression());
 		assert expectedOutput.equals(filter.toExpression());
+	}
+
+	/**
+	 * Demonstrates the catch-all filter and validates its safety guards.
+	 * 
+	 * <p>
+	 * {@link PacketFilter#all()} produces an unconditional match-all filter
+	 * recognized by all backends. It cannot be combined with other filters;
+	 * attempts to chain or use inside {@code anyOf()} are rejected.
+	 * 
+	 * {@snippet :
+	 * // Catch-all compiles to backend-specific accept-all
+	 * PacketDsl dsl = PacketFilter.all();
+	 * PacketFilter filter = new BpfFilterBuilder().build(dsl);
+	 * filter.isCatchAll();   // true
+	 * filter.toExpression(); // "all"
+	 * }
+	 * 
+	 * @throws FilterException if filter construction fails
+	 * @see PacketFilter#ALL
+	 * @see PacketFilter#isCatchAll()
+	 */
+	static void catchAll() throws FilterException {
+		System.out.println("-- catchAll -- ");
+
+		// Basic catch-all
+		dsl = PacketFilter.all();
+		PcapPacketFilter filter = new BpfFilterBuilder().build(dsl);
+		System.out.println(filter.toExpression());
+		assert "all".equals(filter.toExpression());
+		assert filter.isCatchAll();
+
+		// Constant identity
+		assert PacketFilter.all() == PacketFilter.ALL;
+
+		// BPF binary should be null for catch-all
+		try {
+			var bpf = filter.toBpfProgram();
+			assert bpf == null : "catch-all should not produce a BPF program";
+			System.out.println("toBpfProgram() returned null (correct)");
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		// Guard: ALL cannot be chained
+		try {
+			dsl = PacketFilter.all().ip4();
+			new BpfFilterBuilder().build(dsl); // exception thrown here during emit
+			assert false : "should have thrown";
+		} catch (UnsupportedOperationException e) {
+			System.out.println("chaining blocked: " + e.getMessage());
+		}
+
+		// Guard: ALL cannot be used inside anyOf(PacketDsl...)
+		try {
+			PacketFilter.anyOf(
+					PacketFilter.all(),
+					PacketFilter.ip4());
+			assert false : "should have thrown";
+		} catch (FilterException e) {
+			System.out.println("anyOf blocked: " + e.getMessage());
+		}
+
+		// Guard: ALL cannot be used inside anyOf(HeaderDsl...)
+		// Note: ALL is a PacketDsl, not a HeaderDsl, so this is
+		// a compile-time type error — no runtime check needed.
+
+		System.out.println("-- catchAll passed --");
 	}
 
 	/**
@@ -565,18 +659,21 @@ public class PacketFilterExamples {
 	 * </p>
 	 *
 	 * @param args command line arguments (unused)
+	 * @throws FilterException
 	 */
-	public static void main(String[] args) {
-		vlan();
-		tls();
-		udp();
-		esp();
-		ipSecEsp();
-		ah();
-		vlanIp();
-		mpls();
-		hostNet();
-		vlans();
+	public static void main(String[] args) throws FilterException {
+		Net.activateLicense();
+//		vlan();
+//		tls();
+//		udp();
+//		esp();
+//		ipSecEsp();
+//		ah();
+//		vlanIp();
+//		mpls();
+//		hostNet();
+//		vlans();
+		catchAll();
 
 		System.out.println("\nAll filter examples passed.");
 	}

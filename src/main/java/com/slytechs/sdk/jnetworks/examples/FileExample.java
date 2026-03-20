@@ -158,7 +158,7 @@ public class FileExample {
 		// Using a direct volume mount or
 		// var unix = UnixStorage(); var volume = unix.mount("captures");
 
-		try (Volume volume = new UnixVolume("captures");
+		try (Volume volume = new UnixVolume("/captures");
 				PacketIterator it = volume.packetIterator("mycapture.cap")) {
 
 			it.forEachRemaining("pkts %s"::formatted);

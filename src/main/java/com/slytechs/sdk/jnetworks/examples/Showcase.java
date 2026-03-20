@@ -15,6 +15,8 @@
  */
 package com.slytechs.sdk.jnetworks.examples;
 
+import static com.slytechs.sdk.protocol.tcpip.tcp.TcpTokens.*;
+
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -31,14 +33,15 @@ import com.slytechs.sdk.jnetworks.concurrency.TaskContext;
 import com.slytechs.sdk.jnetworks.concurrency.TaskExecutor;
 import com.slytechs.sdk.jnetworks.concurrency.TaskRecovery;
 import com.slytechs.sdk.jnetworks.device.Port;
-import com.slytechs.sdk.jnetworks.device.PortFilter;
 import com.slytechs.sdk.jnetworks.net.Capture;
 import com.slytechs.sdk.jnetworks.net.Inline;
 import com.slytechs.sdk.jnetworks.net.Transmit;
 import com.slytechs.sdk.jnetworks.pcap.PcapBackend;
-import com.slytechs.sdk.protocol.core.EtherType;
 import com.slytechs.sdk.protocol.core.Packet;
+import com.slytechs.sdk.protocol.core.filter.FilterException;
+import com.slytechs.sdk.protocol.core.filter.PacketFilter;
 import com.slytechs.sdk.protocol.core.flow.FlowKey;
+import com.slytechs.sdk.protocol.core.id.EtherTypes;
 import com.slytechs.sdk.protocol.core.stack.ProtocolStack;
 import com.slytechs.sdk.protocol.tcpip.ip.Ip4;
 import com.slytechs.sdk.protocol.tcpip.tcp.TcpSegment;
@@ -62,6 +65,149 @@ import com.slytechs.sdk.protocol.tcpip.tcp.TcpToken;
  * @author Sly Technologies Inc.
  */
 public class Showcase {
+
+	/**
+	 * Comprehensive and somewhat complex showcase of various use-cases for traffic
+	 * capture, inline retransmission, traffic generation and specific protocol
+	 * handling and analysis. Single use applications do not neccessarily need to
+	 * utilize all of these features all at once.
+	 * 
+	 * <p>
+	 * See HelloCapture example for a simpler usage example.
+	 * </p>
+	 * 
+	 * <p>
+	 * This example demonstrates the common functionality available across all 3
+	 * backends/implementations (PCAP, DPDK and Napatech NTAPI software). Backend
+	 * specific overrides and hardware offloads are fully utilized and available for
+	 * user configuration.
+	 * </p>
+	 * <p>
+	 * For other backends, the setup pattern is as follows:
+	 * {@snippet :
+	 * try (Pcap pcap = new PcapBackend(settings)) {}
+	 * try (Dpdk dpdk = new DpdkBackend(settings)) {}
+	 * try (Ntapi ntapi = new NtapiBackend(settings)) {}
+	 * try (Net net = new DpdkBackend(settings)) {} // For generic functionality using DPDK software
+	 * }
+	 * With each pattern, you work with specific subclass which provides additional
+	 * methods and functionality which may not be portable to other backends.
+	 * </p>
+	 * <p>
+	 * For example:
+	 * {@snippet :
+	 * try (Dpdk dpdk = new DpdkBackend()) {
+	 * 	PacketChannel[] channels = dpdk.packetChannels("example", 4); // Create 4 packet channels
+	 * 	DpdkCapture capture = dpdk.capture("my capture", PortFilter.ETHERNET.active().first())
+	 * 			.assignTo(channels) // Create 4 rx-queues, one for each channel
+	 * 			.lcore(4) // LCORE 0 through 3 affinity locked, when forked will use a DPDK assigned LCORE threads
+	 * 			.apply(); // Applies a single rx-queue on first active (with traffic) capable DPDK port.
+	 * }
+	 * }
+	 * </p>
+	 */
+	public void executeShowcase() {
+
+		// use DpdkBackend with DPDK capable NICs/Ports
+		// use Ntapi with Napatech SmartNIC configured adapters/Ports
+		try (Net net = new PcapBackend()) {
+
+			// Packet channels will receive packets (captured, dissected, analyzed or empty
+			// for transmit)
+			PacketChannel[] capChannels = net.packetChannels("capture-channel", 4);
+			PacketChannel[] idsChannels = net.packetChannels("inline-ids-channel", 8);
+			PacketChannel[] genChannels = net.packetChannels("traffic-gen-channel", 4);
+			PacketChannel exportChannel = net.packetChannel("export-channel");
+
+			// The channels that will receive reassembled TCP segments
+			ProtocolChannel<TcpSegment>[] tcpChannels = net.protocolChannels("tcp-channel", 15, TcpSegment.class);
+
+			// Tokens are lightweight, stateless analysis objects (16+ bytes). Many token
+			// types available.
+			TokenChannel<TcpToken> tcpTokens = net.tokenChannel("analysis-tokens", TcpToken.class);
+
+			// Start capture only, on ethernet port
+			Capture capture = net.capture("udp-capture-channel", "en0")
+					.filter(PacketFilter.tcp()) // Pcap BPF filter
+					.assignTo(capChannels) // Traffic distributed to these channels, need to fork multiple tasks
+					.exportTo(exportChannel)
+					.apply(); // Start capture, no tx capabilities
+
+			// Start inline capture-forward-transmit, en1 -> en0
+			Inline inline = net.inline("inline-ids-channel", "en1")
+					.filter(PacketFilter.all()) // Pcap BPF filter Pcap.setFilter()
+					.assignTo(idsChannels) // Traffic distributed to these channels, need to fork multiple tasks
+					.txEnable(true) // Default TX flags on each packet
+					.txPorts("en0") // Default TX port
+					.txImmediately() // Do not preserve IFG
+					.apply(); // Start capture + tx-queue router
+
+			// Enable TX on all ETH ports that are UP and generate custom traffic
+			Transmit transmit = net.transmit("traffic-gen-channel")
+					.assignTo(genChannels) // Will provide empty buffers for pkt gen
+					.txEnable(true) // Default TX flags on each packet
+					.txPort("en0") // Default TX port, can override in task worker on per-packet basis
+					.txImmediately() // Do not preserve IFG
+					.apply(); // Start buffers flowing and tx-queue packet router
+
+			// Demonstrate the protocol stack usage
+			ProtocolStack stack = new ProtocolStack() // Enables IPF/TCP reassembly
+					.enableIpReassembly() // Shortcut or configure protocol fully with
+											// ProtocolStack.getProtocol(IpProtocol.class)
+					.enableTcpReassembly(); // Shortcut for common use case
+
+			// Assign TCP traffic for IP/TCP processing
+			Capture tcpReassembled = net.capture("tcp-reassembled-capture", "en0")
+					.filter(PacketFilter.tcp()) // limit to TCP traffic only
+					.assignTo(tcpChannels) // assign to protocol channel, will receive protocol objects not packets
+					.assignTo(tcpTokens) // Tokens sent to this token channel
+					.protocol(stack) // Use this protocol stack for protocol level processing
+					.apply();
+
+			System.out.println("Selected port for capture: " + capture.getPort());
+			System.out.println("Selected port for inline: " + inline.getPort());
+			System.out.println("Selected ports for transmit: " + transmit.listPorts().stream()
+					.map(Port::name)
+					.collect(Collectors.joining(", ")));
+			System.out.println("Selected port for tcp stream reassembly: " + tcpReassembled.getPort());
+
+			// Manage and fork our task workers try-with-resources for proper shutdown/error
+			// handling
+			try (TaskExecutor executor = net.executor("packet-tasks")) {
+
+				// How to handle errors if not handled inside the task worker, or can use
+				// defaults
+				executor.onTaskException(this::handleErrors)
+						.maxRestarts(3)
+						.restartDelay(Duration.ofSeconds(1));
+
+				// Get some port information for our traffic generator
+				Port en0 = net.port("en0");
+				Port en1 = net.port("en1");
+
+				// Use different fork methods to attach task workers to channels
+				executor.fork(capChannels, this::capturedPackets) // 4 workers
+						.fork(idsChannels, this::intrusionDetection) // 8 workers
+						.fork(genChannels, en0, en1, this::generateTraffic) // Can pass multiple args too, 4 workers
+						.fork(tcpChannels, this::processTcpStreams) // 15 workers
+						.fork(tcpTokens, this::analyzeTcpTokens) // 1 worker
+						.fork(exportChannel, ch -> {/* Merged cap channels for file dump */})
+						.shutdownAfter(Duration.ofMinutes(5)) // Shutdown the group in 5 minutes
+						.awaitCompletion(); // Wait for this task group to shutdown, 32 workers
+
+				// Can have sub-groups executor.group("new group").fork()...
+				// Workers can be affinity locked to DPDK LCORE threads
+
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+
+			System.out.printf("Capture complete: %d packets%n", capture.metrics().packetsAssigned());
+
+		} catch (NetException | FilterException e) {
+			e.printStackTrace();
+		}
+	}
 
 	/**
 	 * Our showcase state stub. Implement to handle real use-cases.
@@ -89,10 +235,6 @@ public class Showcase {
 
 		void monitorPerformance(TcpStream stream);
 
-	}
-
-	public static void main(String[] args) {
-		new Showcase().run();
 	}
 
 	private final Map<FlowKey, State> stateMap = new HashMap<>();
@@ -136,7 +278,7 @@ public class Showcase {
 
 			State state = stateMap.get(stream.flowKey());
 
-			switch (token.tokenType()) {
+			switch (token.type()) {
 			case STREAM_SYN -> state.handleConnectionStart(stream);
 			case STREAM_FIN -> {
 				state.handleConnectionEnd(stream);
@@ -152,7 +294,7 @@ public class Showcase {
 
 			// Per-channel disable - not interested in this token type - Automatic token
 			// pruning
-			default -> channel.disable(token.tokenType());
+			default -> channel.disable(token.type());
 			}
 
 			channel.release(token);
@@ -234,14 +376,14 @@ public class Showcase {
 			buffer.bind(packet);
 			buffer.put(mac1);
 			buffer.put(mac2);
-			buffer.putShort((short) EtherType.IPv4); // ether.type = IPv4
+			buffer.putShort((short) EtherTypes.IPv4); // ether.type = IPv4
 			// Write the next Ipv4 header...
 
 			// Update the packet length ETH + IPv4
 			packet.descriptor().setCaptureLength(14 + 20);
 
 			// Override transmit on port "en1"
-			packet.tx().setTxPort(en1.number());
+			packet.tx().setTxPort(en1.index());
 
 			// Packet is transmitted on release
 			channel.release(packet);
@@ -326,145 +468,7 @@ public class Showcase {
 		}
 	}
 
-	/**
-	 * Comprehensive and somewhat complex showcase of various use-cases for traffic
-	 * capture, inline retransmission, traffic generation and specific protocol
-	 * handling and analysis. Single use applications do not neccessarily need to
-	 * utilize all of these features all at once.
-	 * 
-	 * <p>
-	 * See HelloCapture example for a simpler usage example.
-	 * </p>
-	 * 
-	 * <p>
-	 * This example demonstrates the common functionality available across all 3
-	 * backends/implementations (PCAP, DPDK and Napatech NTAPI software). Backend
-	 * specific overrides and hardware offloads are fully utilized and available for
-	 * user configuration.
-	 * </p>
-	 * <p>
-	 * For other backends, the setup pattern is as follows:
-	 * {@snippet :
-	 * try (Pcap pcap = new PcapBackend(settings)) {}
-	 * try (Dpdk dpdk = new DpdkBackend(settings)) {}
-	 * try (Ntapi ntapi = new NtapiBackend(settings)) {}
-	 * try (Net net = new DpdkBackend(settings)) {} // For generic functionality using DPDK software
-	 * }
-	 * With each pattern, you work with specific subclass which provides additional
-	 * methods and functionality which may not be portable to other backends.
-	 * </p>
-	 * <p>
-	 * For example:
-	 * {@snippet :
-	 * try (Dpdk dpdk = new DpdkBackend()) {
-	 * 	PacketChannel[] channels = dpdk.packetChannels("example", 4); // Create 4 packet channels
-	 *  	DpdkCapture capture = dpdk.capture("my capture", PortFilter.ETHERNET.active().first())
-	 *  		.assignTo(channels) // Create 4 rx-queues, one for each channel
-	 *  		.lcore(4) // LCORE 0 through 3 affinity locked, when forked will use a DPDK assigned LCORE threads
-	 *  		.apply(); // Applies a single rx-queue on first active (with traffic) capable DPDK port.
-	 * }
-	 * }
-	 * </p>
-	 */
-	public void run() {
-		// Searches for commercial license or fallback on community license
-		Net.activateLicense();
-
-		// use DpdkBackend with DPDK capable NICs/Ports
-		// use Ntapi with Napatech SmartNIC configured adapters/Ports
-		try (Net net = new PcapBackend()) {
-
-			// Packet channels will receive packets (captured, dissected, analyzed or empty
-			// for transmit)
-			PacketChannel[] capChannels = net.packetChannels("capture-channel", 4);
-			PacketChannel[] idsChannels = net.packetChannels("inline-ids-channel", 8);
-			PacketChannel[] genChannels = net.packetChannels("traffic-gen-channel", 4);
-
-			// The channels that will receive reassembled TCP segments
-			ProtocolChannel<TcpSegment>[] tcpChannels = net.protocolChannels("tcp-channel", 15, TcpSegment.class);
-
-			// Tokens are lightweight, stateless analysis objects (16+ bytes). Many token
-			// types available.
-			TokenChannel<TcpToken> tcpTokens = net.tokenChannel("analysis-tokens", TcpToken.class);
-
-			// Start capture only, on ethernet port
-			Capture capture = net.capture("udp-capture-channel", "en0")
-					.filter("udp") // Pcap BPF filter
-					.assignTo(capChannels) // Traffic distributed to these channels, need to fork multiple tasks
-					.apply(); // Start capture, no tx capabilities
-
-			// Start inline capture-forward-transmit, en1 -> en0
-			Inline inline = net.inline("inline-ids-channel", "en1")
-					.filter("all") // Pcap BPF filter Pcap.setFilter()
-					.assignTo(idsChannels) // Traffic distributed to these channels, need to fork multiple tasks
-					.txEnable(true) // Default TX flags on each packet
-					.txPorts("en0") // Default TX port
-					.txImmediately() // Do not preserve IFG
-					.apply(); // Start capture + tx-queue router
-
-			// Enable TX on all ETH ports that are UP and generate custom traffic
-			Transmit transmit = net.transmit("traffic-gen-channel", PortFilter.ETHERNET.up())
-					.assignTo(genChannels) // Will provide empty buffers for pkt gen
-					.txEnable(true) // Default TX flags on each packet
-					.txPort("en0") // Default TX port, can override in task worker on per-packet basis
-					.txImmediately() // Do not preserve IFG
-					.apply(); // Start buffers flowing and tx-queue packet router
-
-			// Demonstrate the protocol stack usage
-			ProtocolStack stack = new ProtocolStack() // Enables IPF/TCP reassembly
-					.enableIpReassembly() // Shortcut or configure protocol fully with
-											// ProtocolStack.getProtocol(IpProtocol.class)
-					.enableTcpReassembly(); // Shortcut for common use case
-
-			// Assign TCP traffic for IP/TCP processing
-			Capture tcpReassembled = net.capture("tcp-reassembled-capture", "en0")
-					.filter("tcp") // limit to TCP traffic only
-					.assignTo(tcpChannels) // assign to protocol channel, will receive protocol objects not packets
-					.assignTo(tcpTokens) // Tokens sent to this token channel
-					.protocol(stack) // Use this protocol stack for protocol level processing
-					.apply();
-
-			System.out.println("Selected port for capture: " + capture.getPort());
-			System.out.println("Selected port for inline: " + inline.getPort());
-			System.out.println("Selected ports for transmit: " + transmit.listPorts().stream()
-					.map(Port::name)
-					.collect(Collectors.joining(", ")));
-			System.out.println("Selected port for tcp stream reassembly: " + tcpReassembled.getPort());
-
-			// Manage and fork our task workers try-with-resources for proper shutdown/error
-			// handling
-			try (TaskExecutor executor = net.executor("packet-tasks")) {
-
-				// How to handle errors if not handled inside the task worker, or can use
-				// defaults
-				executor.onTaskException(this::handleErrors)
-						.maxRestarts(3)
-						.restartDelay(Duration.ofSeconds(1));
-
-				// Get some port information for our traffic generator
-				Port en0 = net.getPort("en0");
-				Port en1 = net.getPort("en1");
-
-				// Use different fork methods to attach task workers to channels
-				executor.fork(capChannels, this::capturedPackets) // 4 workers
-						.fork(idsChannels, this::intrusionDetection) // 8 workers
-						.fork(genChannels, en0, en1, this::generateTraffic) // Can pass multiple args too, 4 workers
-						.fork(tcpChannels, this::processTcpStreams) // 15 workers
-						.fork(tcpTokens, this::analyzeTcpTokens) // 1 worker
-						.shutdownAfter(Duration.ofMinutes(5)) // Shutdown the group in 5 minutes
-						.awaitCompletion(); // Wait for this task group to shutdown, 32 workers
-
-				// Can have sub-groups executor.group("new group").fork()...
-				// Workers can be affinity locked to DPDK LCORE threads
-
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-
-			System.out.printf("Capture complete: %d packets%n", capture.metrics().packetsAssigned());
-
-		} catch (NetException e) {
-			e.printStackTrace();
-		}
+	public static void main(String[] args) {
+		new Showcase().executeShowcase();
 	}
 }

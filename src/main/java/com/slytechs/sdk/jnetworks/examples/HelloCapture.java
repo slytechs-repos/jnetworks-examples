@@ -21,12 +21,12 @@ import com.slytechs.sdk.common.session.SessionShutdownException;
 import com.slytechs.sdk.jnetworks.Net;
 import com.slytechs.sdk.jnetworks.NetException;
 import com.slytechs.sdk.jnetworks.channels.PacketChannel;
-import com.slytechs.sdk.jnetworks.channels.PacketChannelSettings;
 import com.slytechs.sdk.jnetworks.concurrency.TaskExecutor;
 import com.slytechs.sdk.jnetworks.net.Capture;
 import com.slytechs.sdk.jnetworks.pcap.PcapBackend;
 import com.slytechs.sdk.protocol.core.Packet;
-import com.slytechs.sdk.protocol.core.stack.ProtocolStack;
+import com.slytechs.sdk.protocol.core.filter.FilterException;
+import com.slytechs.sdk.protocol.core.filter.PacketFilter;
 
 /**
  * Hello World example for jNetWorks SDK.
@@ -54,16 +54,13 @@ public class HelloCapture {
 
 		// use DpdkBackend with DPDK capable NICs/Ports
 		// use NtapiBackend with Napatech SmartNIC configured adapters/Ports
-		try (Net net = new PcapBackend()) {
+		try (Net net = new PcapBackend("pcap-capture")) {
 
-			ProtocolStack stack = new ProtocolStack(); // Enables IPF/TCP reassembly
-			PacketChannelSettings settings = new PacketChannelSettings(); // Channel options
-
-			PacketChannel channel = net.packetChannel("hello-channel", settings, stack);
+			PacketChannel channel = net.packetChannel("hello-channel");
 
 			// Start capture only, on first active (with traffic) ETH port
 			Capture capture = net.capture("hello-capture", "en0")
-					.filter("tcp") // Pcap BPF filter
+					.filter(PacketFilter.all()) // Capture all packets
 					.assignTo(channel) // Traffic distributed to this channel, need to fork a Task
 					.apply(); // Start capture, no tx capabilities
 
@@ -77,10 +74,10 @@ public class HelloCapture {
 			} catch (Throwable e) {
 				e.printStackTrace();
 			}
-			
+
 			System.out.printf("Capture complete: %d packets%n", capture.metrics().packetsAssigned());
 
-		} catch (NetException e) {
+		} catch (NetException | FilterException e) {
 			e.printStackTrace();
 		}
 	}
