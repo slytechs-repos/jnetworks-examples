@@ -7,6 +7,7 @@
 module com.slytechs.sdk.jnetworks.examples {
 	requires com.slytechs.sdk.jnetworks;
 	requires com.slytechs.sdk.jnetworks.pcap;
+	requires com.slytechs.sdk.jnetworks.file.pcap;
 //	requires com.slytechs.sdk.jnetworks.dpdk;
 	
 	requires com.slytechs.sdk.common;

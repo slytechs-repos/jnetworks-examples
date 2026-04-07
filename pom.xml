@@ -30,9 +30,13 @@
             <groupId>com.slytechs.sdk</groupId>
             <artifactId>jnetworks-pcap</artifactId>
         </dependency>
+<!--        <dependency>-->
+<!--            <groupId>com.slytechs.sdk</groupId>-->
+<!--            <artifactId>jnetworks-dpdk</artifactId>-->
+<!--        </dependency>-->
         <dependency>
             <groupId>com.slytechs.sdk</groupId>
-            <artifactId>jnetworks-dpdk</artifactId>
+            <artifactId>jnetworks-file-pcap</artifactId>
         </dependency>
 
         <!-- Protocol Packs -->

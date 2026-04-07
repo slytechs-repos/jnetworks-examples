@@ -17,11 +17,8 @@ package com.slytechs.sdk.jnetworks.examples;
 
 import java.io.IOException;
 
-import com.slytechs.sdk.jnetworks.Net;
-import com.slytechs.sdk.jnetworks.PacketIterator;
-import com.slytechs.sdk.jnetworks.net.CaptureMetrics;
-import com.slytechs.sdk.jnetworks.storage.volumes.UnixVolume;
-import com.slytechs.sdk.jnetworks.storage.volumes.Volume;
+import com.slytechs.sdk.jnetworks.storage.Storage;
+import com.slytechs.sdk.jnetworks.storage.StorageMetrics;
 
 /**
  * Demonstrates advanced file reading and writing with channel-based processing.
@@ -123,8 +120,8 @@ import com.slytechs.sdk.jnetworks.storage.volumes.Volume;
  * 
  * <h2>This Example</h2>
  * <p>
- * Demonstrates Pattern 3 (Shortcut) with iterator-based processing, showing
- * how to:
+ * Demonstrates Pattern 3 (Shortcut) with iterator-based processing, showing how
+ * to:
  * </p>
  * <ul>
  * <li>Open and filter existing capture files</li>
@@ -142,31 +139,26 @@ public class FileExample {
 	}
 
 	public void run() {
-		// Searches for commercial license or fallback on community license
-		Net.activateLicense();
-
 		// @formatter:off
 		// Other storage types:
-		//		- UnixStorage    - Local filesystem
-		//		- S3Storage      - AWS S3, MinIO
-		//		- ExaStorage     - Distributed ExaVolume
-		//		- AzureStorage   - Azure Blob
-		//		- GcsStorage     - Google Cloud Storage
+		//		- S3Storage      - s3://*  -  AWS S3, MinIO
+		//		- ExaStorage     - exa://* - Distributed ExaVolume
+		//		- AzureStorage   - az://*  - Azure Blob
+		//		- GcsStorage     - gcs://* - Google Cloud Storage
 		// @formatter:on
 
 		// Use ExaStorage/ExaVolume for advanced capabilities.
 		// Using a direct volume mount or
 		// var unix = UnixStorage(); var volume = unix.mount("captures");
 
-		try (Volume volume = new UnixVolume("/captures");
-				PacketIterator it = volume.packetIterator("mycapture.cap")) {
+		try (Storage pcapFile = Storage.open("/captures/mycapture.cap")) {
 
-			it.forEachRemaining("pkts %s"::formatted);
+			pcapFile.reader().forEach("pkts %s"::formatted);
 
-			CaptureMetrics metrics = it.metrics();
-			System.out.printf("Capture complete: %d packets%n", metrics.packetsReceived());
+			StorageMetrics metrics = pcapFile.reader().metrics();
+			System.out.printf("Capture complete: %d packets%n", metrics.packetsRead());
 
-		} catch (InterruptedException | IOException e) {
+		} catch (IOException e) {
 			e.printStackTrace();
 		}
 	}
